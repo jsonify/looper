@@ -62,7 +62,7 @@ struct PreviewTimelineTests {
 
     @Test func finalFadeAndStart() {
         let t = timeline()
-        #expect(t.time(for: .finalFade, from: 0, finalFade: 60) == 3 * 3600 - 63)
+        #expect(t.time(for: .finalFade, from: 0, finalFade: 60) == Double(3 * 3600 - 63))
         #expect(t.time(for: .start, from: 500) == 0)
         #expect(t.time(for: .finalFade, from: 0, finalFade: 99_999) == 0)
     }
