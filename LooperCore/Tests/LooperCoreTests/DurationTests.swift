@@ -17,13 +17,18 @@ struct DurationTests {
         let timeRange = try await track.load(.timeRange)
         #expect(abs((timeRange.duration - CMTime(value: 3610, timescale: 1)).seconds) < 1e-6,
                 "video duration \(timeRange.duration.seconds)")
-        #expect(try await MediaInspection.videoSampleCount(of: asset) == 108_300)
 
-        // Decode only the last 2 s: the final copy is 10 s long, so it must end on frame 299.
-        let tail = CMTimeRange(start: CMTime(value: 3608, timescale: 1), end: CMTime(value: 3610, timescale: 1))
-        let ids = try await MediaInspection.frameIDs(of: asset, bitBlock: fixture.bitBlock, timeRange: tail)
+        // Count decoded frames, not raw samples: the trimmed copy carries one extra
+        // sample that the decoder needs but the edit list hides. Decoding everything
+        // also checks continuity across all 120 seams and that the last frame is 299
+        // (the final copy is 10 s long).
+        let ids = try await MediaInspection.frameIDs(of: asset, bitBlock: fixture.bitBlock)
+        #expect(ids.count == 108_300)
         #expect(ids.last == 299)
         #expect(isContinuousLoop(ids, frameCount: fixture.frameCount))
+        if FFmpeg.available {
+            #expect(try FFmpeg.frameCount(of: asset.url) == 108_300)
+        }
     }
 
     @Test func targetShorterThanOneClip() async throws {

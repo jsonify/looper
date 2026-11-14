@@ -23,6 +23,9 @@ struct LongExportTests {
 
         #expect(plan.frameCount == 8 * 3600 * 30)
         #expect(try await MediaInspection.videoSampleCount(of: asset) == plan.frameCount)
+        if FFmpeg.available {
+            #expect(try FFmpeg.frameCount(of: asset.url) == plan.frameCount)
+        }
         let track = try await MediaInspection.videoTrack(of: asset)
         let timeRange = try await track.load(.timeRange)
         #expect(abs((timeRange.duration - plan.duration).seconds) < 1e-6)

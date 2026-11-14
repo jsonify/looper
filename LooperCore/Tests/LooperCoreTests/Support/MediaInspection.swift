@@ -53,11 +53,26 @@ enum MediaInspection {
         return ids
     }
 
-    /// Presentation times of all video samples, sorted, read without decoding.
-    static func videoPresentationTimes(of asset: AVAsset) async throws -> [CMTime] {
-        try await compressedVideoSamples(of: asset) { sample in
-            CMSampleBufferGetPresentationTimeStamp(sample)
-        }.sorted { $0 < $1 }
+    /// Presentation times of the decoded frames, in display order. Raw compressed
+    /// samples aren't used here: a trimmed copy can carry an extra sample that the
+    /// decoder needs but the edit list hides, and raw timestamps include each copy's
+    /// B-frame offset. Decoded frames are what a player actually shows.
+    static func decodedFrameTimes(of asset: AVAsset) async throws -> [CMTime] {
+        let track = try await videoTrack(of: asset)
+        let reader = try AVAssetReader(asset: asset)
+        let output = AVAssetReaderTrackOutput(track: track, outputSettings: [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarFullRange,
+        ])
+        output.alwaysCopiesSampleData = false
+        reader.add(output)
+        guard reader.startReading() else { throw failure(reader) }
+        var times: [CMTime] = []
+        while let sample = output.copyNextSampleBuffer() {
+            guard CMSampleBufferGetImageBuffer(sample) != nil else { continue }
+            times.append(CMSampleBufferGetPresentationTimeStamp(sample))
+        }
+        if reader.status == .failed { throw failure(reader) }
+        return times
     }
 
     /// A hash of each compressed video sample's bytes, in decode order. Equal hashes

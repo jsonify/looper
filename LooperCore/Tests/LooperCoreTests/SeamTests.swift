@@ -31,12 +31,26 @@ struct SeamTests {
         let folder = try TemporaryFolder()
         defer { folder.remove() }
         let (asset, plan) = try await exportLoop(fixture, seconds: 130, in: folder)
-        let times = try await MediaInspection.videoPresentationTimes(of: asset)
+        let times = try await MediaInspection.decodedFrameTimes(of: asset)
         #expect(times.count == plan.frameCount)
         let frame = plan.frameDuration
         let gaps = zip(times, times.dropFirst()).map { $1 - $0 }
         let uneven = gaps.enumerated().filter { abs(($0.element - frame).seconds) > 1e-6 }
         #expect(uneven.isEmpty, "uneven gaps at frames \(uneven.prefix(5).map(\.offset)): \(uneven.prefix(5).map { $0.element.seconds })")
+    }
+
+    /// The same frames come out when ffmpeg decodes the file (YouTube's ingest is
+    /// ffmpeg-like), so the multi-segment edit list is read the same way there.
+    @Test(.enabled(if: FFmpeg.available || FFmpeg.required, "ffmpeg not installed"), arguments: fixtures)
+    func ffmpegDecodesTheSameFrames(_ fixture: VideoFixture) async throws {
+        try #require(FFmpeg.available, "ffmpeg/ffprobe required (LOOPER_REQUIRE_FFMPEG=1) but not found")
+        let folder = try TemporaryFolder()
+        defer { folder.remove() }
+        let (asset, plan) = try await exportLoop(fixture, seconds: 130, in: folder)
+        #expect(try FFmpeg.frameCount(of: asset.url) == plan.frameCount)
+        let ids = try FFmpeg.frameIDs(of: asset.url, bitBlock: fixture.bitBlock)
+        #expect(ids.count == plan.frameCount)
+        #expect(ids == (0..<plan.frameCount).map { $0 % fixture.frameCount })
     }
 
     /// Passthrough: the output's compressed samples for full copies are byte-identical
