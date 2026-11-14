@@ -107,7 +107,8 @@ struct ETAEstimatorTests {
 
     @Test func linearFromAverageRate() throws {
         var eta = ETAEstimator()
-        let value = try #require(eta.update(fraction: 0.25, elapsed: 30))
+        let estimate = eta.update(fraction: 0.25, elapsed: 30)
+        let value = try #require(estimate)
         #expect(abs(value - 90) < 0.001)
         #expect(eta.update(fraction: 1, elapsed: 120) == 0)
     }

@@ -20,7 +20,7 @@ struct SeamTests {
         let expected = (0..<plan.frameCount).map { $0 % fixture.frameCount }
         #expect(ids.count == plan.frameCount)
         if ids != expected {
-            let firstBad = zip(ids, expected).firstIndex { $0 != $1 } ?? min(ids.count, expected.count)
+            let firstBad = ids.indices.first { $0 >= expected.count || ids[$0] != expected[$0] } ?? ids.count
             let window = max(0, firstBad - 3)..<min(ids.count, firstBad + 4)
             Issue.record("frame \(firstBad) differs; got \(Array(ids[window])) around it")
         }

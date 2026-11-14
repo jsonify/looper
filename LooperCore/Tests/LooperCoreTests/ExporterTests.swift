@@ -49,7 +49,8 @@ struct ExporterTests {
 
         let result = await export.result
         #expect(throws: CancellationError.self) { try result.get() }
-        #expect(try folder.contents().isEmpty, "left behind: \(try folder.contents())")
+        let leftovers = try folder.contents()
+        #expect(leftovers.isEmpty, "left behind: \(leftovers)")
     }
 }
 
