@@ -48,11 +48,13 @@ struct ContentView: View {
     }
 }
 
-/// The main window's size. Tall enough for the clip, length, output and export
-/// without scrolling; the audio options scroll.
+/// The main window's size (content area, below the title bar), matched to the
+/// user's reference screenshot: about 790 × 730 pt including the title bar. Tall
+/// enough for the clip, length, output and export without scrolling; the audio
+/// options scroll.
 enum Layout {
-    static let width: CGFloat = 600
-    static let height: CGFloat = 760
+    static let width: CGFloat = 790
+    static let height: CGFloat = 700
     static let minWidth: CGFloat = 560
     static let minHeight: CGFloat = 520
 }
