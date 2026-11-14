@@ -44,9 +44,9 @@ A macOS app that takes a short, seamless video loop (for example a 30-second amb
 - Check output duration and frame count with `ffprobe` (ffmpeg is fine as a developer tool on this Mac, just not bundled in the app). For example, 3 h at 30 fps = 324,000 frames exactly.
 - Test a target that isn't a whole multiple of the clip length (for example 1 h 0 m 10 s) to confirm the last copy is trimmed correctly.
 - Test a very long export (8 h) for memory use and speed.
-- The user's standard manual test on their Mac (real clip, run after each engine change and for milestone sign-offs; ask them to run it and paste the output):
-  `cd ~/code/macOS/looper/LooperCore && swift run -c release looper ~/Desktop/cabin_rain_loop_30s_v2.MP4 3h ~/Desktop/test-3h.mp4`
-  For the full sign-off, the same with `8h` and `~/Desktop/test-8h.mp4`.
+- The user's standard manual test on their Mac (real clip, run after each engine change; ask them to run it and paste the output):
+  `cd ~/code/macOS/looper/LooperCore && swift run -c release looper ~/Desktop/cabin_rain_loop_30s_v2.MP4 15m ~/Desktop/test-15m.mp4`
+  For milestone sign-offs, the same with `8h` and `~/Desktop/test-8h.mp4`.
 
 ## Conventions
 
