@@ -4,7 +4,8 @@ import Testing
 
 /// M3 (#32–#36): exports with audio. Bed, playlist and clip audio are mixed through
 /// AVAssetReaderAudioMixOutput into one AAC track; video stays a byte-for-byte copy.
-@Suite("Audio export", .enabled(if: Fixtures.available, "Run scripts/make-test-clip.sh to generate fixtures"))
+@Suite("Audio export", .enabled(if: Fixtures.available, "Run scripts/make-test-clip.sh to generate fixtures"),
+       .timeLimit(.minutes(2)))
 struct AudioExportTests {
     static let quietTrack = AudioTrackSettings(volume: 1, fadeIn: 0, fadeOut: 0)
 
@@ -131,7 +132,8 @@ struct AudioExportTests {
 
 /// #39-style long run in CI: 8 h of tiny video with bed + playlist.
 @Suite("Long audio export", .enabled(if: Fixtures.available && TestEnvironment.longTests,
-                                     "Set LOOPER_LONG_TESTS=1 and generate fixtures to run"))
+                                     "Set LOOPER_LONG_TESTS=1 and generate fixtures to run"),
+       .timeLimit(.minutes(6)))
 struct LongAudioExportTests {
     @Test func eightHoursWithBedAndPlaylist() async throws {
         let folder = try TemporaryFolder()
@@ -141,6 +143,12 @@ struct LongAudioExportTests {
         let audio = LoopAudioSettings(bed: BedSettings(file: AudioFixture.bed.url),
                                       playlist: PlaylistSettings(folder: Fixtures.url(AudioFixture.playlistDirectory)))
         let url = folder.file("8h-audio.mp4")
+        let buildClock = ContinuousClock()
+        let buildStart = buildClock.now
+        let points = GainEnvelope.points(
+            for: AudioChain.placements(itemDurations: [6, 6, 6], crossfade: 3, fill: plan.duration.seconds),
+            volume: 1, fadeIn: 3, fadeOut: 10, total: plan.duration.seconds)
+        print("8 h playlist envelope: \(points.count) points in \(buildClock.now - buildStart)")
         let memoryBefore = peakResidentBytes()
         let clock = ContinuousClock()
         let started = clock.now
