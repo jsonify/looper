@@ -193,6 +193,36 @@ struct LooperModelTests {
         #expect(model.audio.bed == nil)
     }
 
+    /// A video with sound can be the bed; its silent lead-in is trimmed by default.
+    @Test func bedFromAVideoIsTrimmedToItsSound() async throws {
+        let folder = try TemporaryFolder()
+        defer { folder.remove() }
+        let model = makeModel(folder: folder)
+        await model.chooseBed(AudioFixture.recording.url)
+        #expect(model.audioError == nil)
+        let silence = try #require(model.bedSilence)
+        #expect(abs(silence.start - 1) < 0.05)
+        #expect(model.audio.bed?.trim == silence)
+        #expect(abs((model.bedItem?.seconds ?? 0) - 8.5) < 0.1)
+        #expect(model.bedSilenceSummary?.hasPrefix("Trimmed silence: 1.0 s at the start") == true)
+        #expect(model.audioNotes.contains { $0.contains("sound from this video") })
+        #expect(!model.audioNotes.contains { $0.contains("compressed") })
+
+        model.trimBedSilence = false
+        #expect(model.audio.bed?.trim == nil)
+        #expect(abs((model.bedItem?.seconds ?? 0) - 10) < 0.05)
+        #expect(model.bedSilenceSummary?.hasPrefix("Found silence") == true)
+
+        model.trimBedSilence = true
+        #expect(model.audio.bed?.trim == silence)
+
+        // A file with no silence to trim (the pink-noise WAV) loops whole.
+        await model.chooseBed(AudioFixture.bed.url)
+        #expect(model.bedSilence == nil)
+        #expect(model.audio.bed?.trim == nil)
+        #expect(model.bedSilenceSummary == nil)
+    }
+
     @Test func clipAudioCountsOnlyWhenTheClipHasAudio() async throws {
         let folder = try TemporaryFolder()
         defer { folder.remove() }

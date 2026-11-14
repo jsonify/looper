@@ -48,6 +48,46 @@ struct AudioChainTests {
     }
 }
 
+@Suite("SilenceTrim")
+struct SilenceTrimTests {
+    /// Peaks per 10 ms window: `silent` windows of near-silence around `loud` windows.
+    func peaks(lead: Int, loud: Int, tail: Int) -> [Float] {
+        Array(repeating: 0.0001, count: lead) + Array(repeating: 0.3, count: loud) + Array(repeating: 0.0001, count: tail)
+    }
+
+    @Test func trimsLeadingAndTrailingSilence() throws {
+        let trim = try #require(SilenceTrim.audibleRange(windowPeaks: peaks(lead: 80, loud: 900, tail: 20),
+                                                         windowSeconds: 0.01, totalSeconds: 10))
+        #expect(abs(trim.start - 0.8) < 1e-9)
+        #expect(abs(trim.end - 9.8) < 1e-9)
+    }
+
+    @Test func tinyTrimsAreIgnored() throws {
+        #expect(SilenceTrim.audibleRange(windowPeaks: peaks(lead: 2, loud: 996, tail: 2),
+                                         windowSeconds: 0.01, totalSeconds: 10) == nil)
+        // Only the end is worth trimming: the start stays at 0.
+        let trim = try #require(SilenceTrim.audibleRange(windowPeaks: peaks(lead: 2, loud: 898, tail: 100),
+                                                         windowSeconds: 0.01, totalSeconds: 10))
+        #expect(trim.start == 0)
+        #expect(abs(trim.end - 9) < 1e-9)
+    }
+
+    @Test func allSilenceIsNotTrimmed() {
+        #expect(SilenceTrim.audibleRange(windowPeaks: Array(repeating: 0, count: 500),
+                                         windowSeconds: 0.01, totalSeconds: 5) == nil)
+    }
+
+    @Test func trimmedItemPlaysOnlyTheRange() {
+        let item = AudioItem(url: URL(fileURLWithPath: "/tmp/rec.mp4"), seconds: 30, codec: "aac ", sampleRate: 48_000, channels: 2)
+        #expect(item.isFromVideo)
+        let trimmed = item.trimmed(AudioTrim(start: 0.8, end: 30.5)) // end clamped to the file
+        #expect(trimmed.start == 0.8)
+        #expect(abs(trimmed.seconds - 29.2) < 1e-9)
+        #expect(trimmed.fileSeconds == 30)
+        #expect(trimmed.trimmed(nil) == item)
+    }
+}
+
 @Suite("GainEnvelope")
 struct GainEnvelopeTests {
     let placements = AudioChain.placements(itemDurations: [10], crossfade: 2, fill: 30)

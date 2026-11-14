@@ -7,6 +7,9 @@ import LooperCore
 ///
 ///     swift run -c release looper <clip> <duration> <output.mp4> [--bed <file>] [--playlist <folder>] [--clip-audio]
 ///
+/// The bed can be an audio file or a video with sound; silence at its start and end is
+/// trimmed (as in the app) unless `--keep-bed-silence` is given.
+///
 /// Prints progress, then wall time, peak memory and output size.
 @main
 struct LooperCLI {
@@ -21,12 +24,17 @@ struct LooperCLI {
         }
         if let bed = option("--bed") { audio.bed = BedSettings(file: URL(fileURLWithPath: bed)) }
         if let folder = option("--playlist") { audio.playlist = PlaylistSettings(folder: URL(fileURLWithPath: folder)) }
+        var trimBedSilence = true
+        if let i = args.firstIndex(of: "--keep-bed-silence") {
+            trimBedSilence = false
+            args.remove(at: i)
+        }
         if let i = args.firstIndex(of: "--clip-audio") {
             audio.clipAudio.enabled = true
             args.remove(at: i)
         }
         guard args.count == 3 else {
-            log("usage: looper <clip> <duration: h:mm:ss | 8h | 45m> <output.mp4> [--bed <file>] [--playlist <folder>] [--clip-audio]")
+            log("usage: looper <clip> <duration: h:mm:ss | 8h | 45m> <output.mp4> [--bed <file>] [--keep-bed-silence] [--playlist <folder>] [--clip-audio]")
             exit(2)
         }
         let clipURL = URL(fileURLWithPath: args[0])
@@ -41,6 +49,22 @@ struct LooperCLI {
                 + (clip.isConstantFrameRate ? "" : " (variable frame rate)"))
             log("plan: \(target) = \(plan.fullCopies) full copies + \(plan.remainderFrames) frames, "
                 + "\(plan.frameCount) frames, \(format(plan.duration.seconds))")
+
+            if let bed = audio.bed {
+                let item = try await AudioItem.load(from: bed.file)
+                var line = "bed: \(bed.file.lastPathComponent), \(item.codec.trimmingCharacters(in: .whitespaces)), \(format(item.fileSeconds))"
+                if let silence = try await SilenceTrim.detect(in: bed.file) {
+                    let trimmed = String(format: "%.2f s at the start, %.2f s at the end",
+                                         silence.start, item.fileSeconds - silence.end)
+                    if trimBedSilence {
+                        audio.bed?.trim = silence
+                        line += "; trimmed silence: \(trimmed)"
+                    } else {
+                        line += "; silence kept: \(trimmed)"
+                    }
+                }
+                log(line)
+            }
 
             let clock = ContinuousClock()
             let start = clock.now

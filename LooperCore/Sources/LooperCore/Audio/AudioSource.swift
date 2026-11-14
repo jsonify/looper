@@ -3,7 +3,12 @@ import AVFoundation
 /// One audio file Looper can use: a bed, or a song in a playlist.
 public struct AudioItem: Sendable, Equatable {
     public let url: URL
-    public let seconds: Double
+    /// Length of the part that plays (the whole track unless trimmed).
+    public private(set) var seconds: Double
+    /// Where the part that plays begins, seconds into the file's audio track.
+    public private(set) var start: Double = 0
+    /// Length of the file's whole audio track.
+    public let fileSeconds: Double
     /// Four-character codec, e.g. "lpcm", "flac", "aac ".
     public let codec: String
     public let sampleRate: Double
@@ -14,6 +19,36 @@ public struct AudioItem: Sendable, Equatable {
     public var isLossless: Bool { ["lpcm", "flac", "alac"].contains(codec) }
 
     public var name: String { url.lastPathComponent }
+
+    /// True when the file also has video, e.g. a screen recording of a sound website.
+    public var isFromVideo: Bool {
+        !FolderAudioSource.fileExtensions.contains(url.pathExtension.lowercased())
+    }
+
+    public init(url: URL, seconds: Double, codec: String, sampleRate: Double, channels: Int) {
+        self.url = url
+        self.seconds = seconds
+        self.fileSeconds = seconds
+        self.codec = codec
+        self.sampleRate = sampleRate
+        self.channels = channels
+    }
+
+    /// The same file, playing only `trim` (clamped to the track). nil plays it all.
+    public func trimmed(_ trim: AudioTrim?) -> AudioItem {
+        var item = self
+        guard let trim else {
+            item.start = 0
+            item.seconds = fileSeconds
+            return item
+        }
+        let start = min(max(0, trim.start), fileSeconds)
+        let end = max(start, min(trim.end, fileSeconds))
+        guard end - start > 0 else { return item }
+        item.start = start
+        item.seconds = end - start
+        return item
+    }
 
     public static func load(from url: URL) async throws -> AudioItem {
         let asset = AVURLAsset(url: url, options: ClipInfo.assetOptions)

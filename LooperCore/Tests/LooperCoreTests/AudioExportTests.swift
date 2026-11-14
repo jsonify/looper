@@ -122,6 +122,39 @@ struct AudioExportTests {
         }
     }
 
+    /// A video with sound works as a bed. Its silent lead-in and tail are found and
+    /// trimmed, so the loop has no holes; untrimmed, every wrap has a silent gap.
+    @Test func bedFromAVideoLoopsOnlyItsSound() async throws {
+        let folder = try TemporaryFolder()
+        defer { folder.remove() }
+        let file = AudioFixture.recording.url
+        let item = try await AudioItem.load(from: file)
+        #expect(item.isFromVideo)
+        #expect(abs(item.seconds - AudioFixture.recording.seconds) < 0.05)
+
+        let trim = try #require(try await SilenceTrim.detect(in: file))
+        let expected = AudioFixture.recordingSound
+        #expect(abs(trim.start - expected.start) < 0.05, "sound starts at \(trim.start)")
+        #expect(abs(trim.end - expected.end) < 0.05, "sound ends at \(trim.end)")
+
+        func levels(trim: AudioTrim?, name: String) async throws -> [Double] {
+            let audio = LoopAudioSettings(bed: BedSettings(file: file, trim: trim, track: Self.quietTrack, wrapCrossfade: 1))
+            let (asset, _) = try await export(seconds: 30, audio: audio, in: folder, name: name)
+            let decoded = try await DecodedAudio.decode(try await audioTrack(asset), in: asset)
+            return stride(from: 0.0, to: 29.5, by: 0.5).map { decoded.rms(from: $0, to: $0 + 0.5) }
+        }
+
+        let trimmed = try await levels(trim: trim, name: "trimmed.mp4")
+        let median = trimmed.sorted()[trimmed.count / 2]
+        #expect(median > 0.01)
+        let worst = trimmed.map { abs(decibels($0 / median)) }.max() ?? 0
+        #expect(worst < 3, "trimmed bed strays \(worst) dB from the median")
+
+        let untrimmed = try await levels(trim: nil, name: "untrimmed.mp4")
+        let quietest = untrimmed.min() ?? 0
+        #expect(quietest < 0.1 * median, "untrimmed bed should have silent gaps (quietest \(quietest))")
+    }
+
     @Test func noAudioSettingsMeansNoAudioTrack() async throws {
         let folder = try TemporaryFolder()
         defer { folder.remove() }

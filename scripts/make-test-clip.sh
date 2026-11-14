@@ -116,6 +116,18 @@ else
     echo "exists  audio/bed.wav"
 fi
 
+# A screen recording of a sound website, used as a bed: 10 s video (picture ignored)
+# with stereo AAC audio of 1 s silence, 8.5 s pink noise, 0.5 s silence.
+if needs "$OUT/audio/recording.mp4"; then
+    "${FFMPEG[@]}" -f lavfi -i "color=c=gray:size=320x180:rate=30:duration=10" \
+        -f lavfi -i "anoisesrc=color=pink:sample_rate=48000:duration=8.5:amplitude=0.3,adelay=1000:all=1,apad=whole_dur=10" \
+        -map 0:v -map 1:a -c:v libx264 -preset medium -crf 35 -pix_fmt yuv420p \
+        -ac 2 -c:a aac -b:a 192k -ar 48000 -t 10 -movflags +faststart "$OUT/audio/recording.mp4"
+    echo "made    audio/recording.mp4"
+else
+    echo "exists  audio/recording.mp4"
+fi
+
 # Playlist: three short "songs" with distinct tones, one per lossless format.
 make_tone 01-tone-220.wav  220 -c:a pcm_s16le
 make_tone 02-tone-330.aiff 330 -c:a pcm_s16be
