@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+  workflow_dispatch:
+    inputs:
+      long_tests:
+        description: Run long tests (8 h exports)
+        type: boolean
+        default: false
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Long tests (8 h exports from the tiny clip) run on main and on demand only.
+  LOOPER_LONG_TESTS: ${{ (github.ref == 'refs/heads/main' || inputs.long_tests) && '1' || '0' }}
+
+jobs:
+  core-tests:
+    name: LooperCore tests
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 16
+        run: |
+          XCODE="$(ls -d /Applications/Xcode_16*.app | sort -V | tail -1)"
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+          swift --version
+          uname -m
+
+      - name: Cache fixtures
+        id: fixtures
+        uses: actions/cache@v4
+        with:
+          path: fixtures
+          key: fixtures-${{ runner.os }}-${{ hashFiles('scripts/make-test-clip.sh') }}
+
+      - name: Install ffmpeg
+        if: steps.fixtures.outputs.cache-hit != 'true'
+        run: command -v ffmpeg || brew install ffmpeg
+
+      - name: Generate fixtures
+        if: steps.fixtures.outputs.cache-hit != 'true'
+        run: scripts/make-test-clip.sh
+
+      - name: Test
+        env:
+          LOOPER_REQUIRE_FIXTURES: "1"
+        run: swift test --package-path LooperCore
+
+  app-build:
+    name: App build (universal Release)
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 16
+        run: |
+          XCODE="$(ls -d /Applications/Xcode_16*.app | sort -V | tail -1)"
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+
+      - name: Build
+        run: |
+          xcodebuild build \
+            -project Looper.xcodeproj \
+            -scheme Looper \
+            -configuration Release \
+            -destination 'generic/platform=macOS' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Check the binary is universal
+        run: |
+          BIN=build/DerivedData/Build/Products/Release/Looper.app/Contents/MacOS/Looper
+          ARCHS="$(lipo -archs "$BIN")"
+          echo "archs: $ARCHS"
+          [[ "$ARCHS" == *arm64* && "$ARCHS" == *x86_64* ]]
