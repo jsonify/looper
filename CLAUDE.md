@@ -56,6 +56,7 @@ A macOS app that takes a short, seamless video loop (for example a 30-second amb
 - Keep the code readable, with small types and clear names. Explain non-obvious AVFoundation choices in short comments.
 - Before calling a milestone done, run its tests and report results, not just a successful build.
 - Git workflow: always merge after a pull request. Work on a branch, open a PR, and once CI is green merge it into `main` rather than leaving it open. Close the issues the work resolves once CI is green.
+- **Visual changes need a mockup before merge.** If a PR changes anything the user sees (layout, controls, text, colours, icons, thumbnails or other rendered images), show the user a mockup of the change (for example an HTML artifact or an image) and get their OK before merging, even when CI is green. Cloud sessions can't run the macOS app, so a mockup is how the change gets seen before it lands. PRs with no visual change merge on green CI as above.
 
 ## Project layout and fixtures
 
