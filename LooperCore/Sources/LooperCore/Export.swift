@@ -56,8 +56,12 @@ extension CompositionExporter {
     }
 }
 
-/// Exports with `AVAssetExportPresetPassthrough`: video samples are copied, not
-/// re-encoded, so an 8 h export is a large file copy rather than an 8 h encode.
+/// Exports a composition with `AVAssetExportPresetPassthrough` (samples copied, not
+/// re-encoded).
+///
+/// Not used for loops: the result has one edit-list entry per copy, which ffmpeg
+/// misreads at the first seam for clips with B-frames (see `LoopWriter`), and it
+/// ignores `AVAudioMix` (see CLAUDE.md). Kept for the spike tests and as a reference.
 public struct PassthroughExporter: CompositionExporter {
     /// How often progress is reported.
     public var progressInterval: Duration = .milliseconds(250)
@@ -74,12 +78,7 @@ public struct PassthroughExporter: CompositionExporter {
     ) async throws {
         try Task.checkCancellation()
         let files = FileManager.default
-        if files.fileExists(atPath: outputURL.path) {
-            guard overwrite else { throw ExportError.outputExists(outputURL) }
-            try files.removeItem(at: outputURL)
-        }
-        let partialURL = Self.partialURL(for: outputURL)
-        try? files.removeItem(at: partialURL)
+        let partialURL = try OutputFile.prepare(outputURL, overwrite: overwrite)
 
         let preset = AVAssetExportPresetPassthrough
         guard await AVAssetExportSession.compatibility(ofExportPreset: preset, with: asset, outputFileType: fileType),
@@ -132,12 +131,6 @@ public struct PassthroughExporter: CompositionExporter {
         }
     }
 
-    /// Hidden temporary file in the output folder (same volume, so the final rename is
-    /// instant), e.g. `.video.partial.mp4`.
-    static func partialURL(for outputURL: URL) -> URL {
-        let name = "." + outputURL.deletingPathExtension().lastPathComponent + ".partial." + outputURL.pathExtension
-        return outputURL.deletingLastPathComponent().appendingPathComponent(name)
-    }
 }
 
 /// Lets the progress task and the cancellation handler share the session. Safe because

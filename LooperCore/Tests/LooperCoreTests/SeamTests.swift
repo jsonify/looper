@@ -53,7 +53,27 @@ struct SeamTests {
         #expect(ids == (0..<plan.frameCount).map { $0 % fixture.frameCount })
     }
 
-    /// Passthrough: the output's compressed samples for full copies are byte-identical
+    /// Records why loops aren't exported with AVAssetExportSession passthrough: ffmpeg
+    /// holds frame N-2 for two extra frames at the first seam of such a file. If this
+    /// known issue stops reproducing (a macOS fix), the test fails to say so.
+    @Test(.enabled(if: FFmpeg.available || FFmpeg.required, "ffmpeg not installed"))
+    func passthroughCompositionTripsUpFFmpeg() async throws {
+        try #require(FFmpeg.available, "ffmpeg/ffprobe required (LOOPER_REQUIRE_FFMPEG=1) but not found")
+        let fixture = VideoFixture.fps24
+        let folder = try TemporaryFolder()
+        defer { folder.remove() }
+        let clip = try await ClipInfo.load(from: fixture.url)
+        let plan = LoopPlan(clip: clip, target: try TargetDuration(seconds: 130))
+        let loop = try await LoopComposer.compose(clip: clip, plan: plan)
+        let output = folder.file("passthrough.mp4")
+        try await PassthroughExporter().export(loop.composition, to: output)
+        let ids = try FFmpeg.frameIDs(of: output, bitBlock: fixture.bitBlock)
+        withKnownIssue("ffmpeg misreads per-copy edit lists from passthrough export") {
+            #expect(ids == (0..<plan.frameCount).map { $0 % fixture.frameCount })
+        }
+    }
+
+    /// Video is copied, not re-encoded: the output's compressed samples for full copies are byte-identical
     /// to the source's, repeated.
     @Test(arguments: fixtures)
     func fullCopiesAreByteIdenticalToTheSource(_ fixture: VideoFixture) async throws {
