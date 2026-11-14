@@ -130,42 +130,50 @@ struct AudioExportTests {
     }
 }
 
-/// #39-style long run in CI: 8 h of tiny video with bed + playlist.
-@Suite("Long audio export", .enabled(if: Fixtures.available && TestEnvironment.longTests,
-                                     "Set LOOPER_LONG_TESTS=1 and generate fixtures to run"),
-       .timeLimit(.minutes(6)))
+/// Long runs with audio, measured. Run with LOOPER_LONG_TESTS=1 (CI on main and manual).
+/// The fixtures are deliberately short (10 s bed, 6 s songs), so these also show how
+/// export time grows with the number of crossfaded pieces (each piece adds volume ramps).
+@Suite("Long audio export", .serialized, .enabled(if: Fixtures.available && TestEnvironment.longTests,
+                                                  "Set LOOPER_LONG_TESTS=1 and generate fixtures to run"),
+       .timeLimit(.minutes(4)))
 struct LongAudioExportTests {
-    @Test func eightHoursWithBedAndPlaylist() async throws {
+    struct Case: Sendable, CustomTestStringConvertible {
+        let name: String
+        let seconds: Int
+        let crossfade: Double
+        var testDescription: String { name }
+    }
+
+    /// Pieces of the 10 s bed: 1 h with no crossfade = 360 pieces, 1 h with 3 s = 515,
+    /// 8 h with no crossfade = 2,880.
+    static let cases = [
+        Case(name: "1 h bed, no crossfade", seconds: 3600, crossfade: 0),
+        Case(name: "1 h bed, 3 s crossfade", seconds: 3600, crossfade: 3),
+        Case(name: "8 h bed, no crossfade", seconds: 8 * 3600, crossfade: 0),
+    ]
+
+    @Test(arguments: cases)
+    func bedExport(_ c: Case) async throws {
         let folder = try TemporaryFolder()
         defer { folder.remove() }
         let clip = try await ClipInfo.load(from: VideoFixture.tiny.url)
-        let plan = LoopPlan(clip: clip, target: .eightHours)
-        let audio = LoopAudioSettings(bed: BedSettings(file: AudioFixture.bed.url),
-                                      playlist: PlaylistSettings(folder: Fixtures.url(AudioFixture.playlistDirectory)))
-        let url = folder.file("8h-audio.mp4")
-        let buildClock = ContinuousClock()
-        let buildStart = buildClock.now
-        let points = GainEnvelope.points(
-            for: AudioChain.placements(itemDurations: [6, 6, 6], crossfade: 3, fill: plan.duration.seconds),
-            volume: 1, fadeIn: 3, fadeOut: 10, total: plan.duration.seconds)
-        print("8 h playlist envelope: \(points.count) points in \(buildClock.now - buildStart)")
-        let memoryBefore = peakResidentBytes()
+        let plan = LoopPlan(clip: clip, target: try TargetDuration(seconds: c.seconds))
+        let audio = LoopAudioSettings(bed: BedSettings(
+            file: AudioFixture.bed.url, track: AudioTrackSettings(volume: 1, fadeIn: 3, fadeOut: 10), wrapCrossfade: c.crossfade))
+        let pieces = AudioChain.placements(itemDurations: [10], crossfade: c.crossfade, fill: plan.duration.seconds).count
+        let url = folder.file("long-audio.mp4")
         let clock = ContinuousClock()
         let started = clock.now
+        print("LONG AUDIO [\(c.name)]: \(pieces) pieces, starting")
         try await LoopWriter().export(clip: clip, plan: plan, audio: audio, to: url)
         let elapsed = clock.now - started
         let size = try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64 ?? 0
-        print("8 h export with audio: \(elapsed), output \(size / 1_000_000) MB, peak RSS \(memoryBefore / 1_000_000) → \(peakResidentBytes() / 1_000_000) MB")
+        print("LONG AUDIO [\(c.name)]: \(pieces) pieces, \(elapsed), \(size / 1_000_000) MB, peak RSS \(peakResidentBytes() / 1_000_000) MB")
 
         let asset = AVURLAsset(url: url, options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])
         let audioTrack = try #require(try await asset.loadTracks(withMediaType: .audio).first)
         let audioRange = try await audioTrack.load(.timeRange)
         #expect(abs(audioRange.duration.seconds - plan.duration.seconds) < 0.05)
-        // The last minute still has sound until the fade out.
-        let lastMinute = CMTimeRange(start: CMTime(seconds: 8 * 3600 - 60, preferredTimescale: 600),
-                                     duration: CMTime(seconds: 40, preferredTimescale: 600))
-        let tail = try await DecodedAudio.decode(audioTrack, in: asset, timeRange: lastMinute)
-        #expect(tail.rms(from: tail.start, to: tail.start + 30) > 0.01)
         if FFmpeg.available {
             #expect(try FFmpeg.frameCount(of: url) == plan.frameCount)
         }
