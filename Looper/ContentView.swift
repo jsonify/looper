@@ -15,11 +15,22 @@ struct ContentView: View {
             DurationSection()
             AudioSection()
             OutputSection()
-            ExportSection()
         }
         .formStyle(.grouped)
-        .frame(width: 560)
-        .fixedSize(horizontal: false, vertical: true)
+        // A fixed-size, resizable window: the form scrolls when the audio options make
+        // it taller than the window, instead of the window growing off the screen.
+        .frame(minWidth: Layout.minWidth, idealWidth: Layout.width, maxWidth: .infinity,
+               minHeight: Layout.minHeight, idealHeight: Layout.height, maxHeight: .infinity)
+        // Export, progress and results stay pinned at the bottom, always in view.
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 0) {
+                Divider()
+                ExportSection()
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+            }
+            .background(.bar)
+        }
         .dropDestination(for: URL.self) { urls, _ in
             guard let url = urls.first, !model.isExporting else { return false }
             Task { await model.loadClip(from: url) }
@@ -35,6 +46,15 @@ struct ContentView: View {
         }
         .modifier(ExportFeedback())
     }
+}
+
+/// The main window's size. Tall enough for the clip, length, output and export
+/// without scrolling; the audio options scroll.
+enum Layout {
+    static let width: CGFloat = 600
+    static let height: CGFloat = 760
+    static let minWidth: CGFloat = 560
+    static let minHeight: CGFloat = 520
 }
 
 // MARK: - Clip
@@ -338,7 +358,7 @@ private struct ExportSection: View {
     @State private var confirmCancel = false
 
     var body: some View {
-        Section {
+        Group {
             switch model.phase {
             case .idle:
                 idle
