@@ -35,6 +35,6 @@ scripts/make-test-clip.sh
 swift test --package-path LooperCore
 ```
 
-Open `Looper.xcodeproj` in Xcode to run the app.
+Open `Looper.xcodeproj` in Xcode to run the app, or use the Makefile: `make install` (build and copy to /Applications), `make run`, `make test`, `make cli`. Run `make` to list targets.
 
 Test fixtures go to `fixtures/` (git-ignored), or to `$LOOPER_FIXTURES` if set. Tests that need fixtures are skipped when they're missing; CI sets `LOOPER_REQUIRE_FIXTURES=1` so missing fixtures fail there instead. Long tests (8 h exports) run only when `LOOPER_LONG_TESTS=1`, which CI sets on `main` and on manual runs.
