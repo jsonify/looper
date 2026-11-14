@@ -48,6 +48,8 @@ public struct ClipInfo: @unchecked Sendable {
     public let isConstantFrameRate: Bool
     /// Whether the clip has an audio track (offered as optional "Clip audio" in M3).
     public let hasAudio: Bool
+    /// Total bytes of compressed video samples, for output size estimates.
+    public let videoByteCount: Int64
 
     public var duration: CMTime { videoTimeRange.duration }
 
@@ -76,6 +78,7 @@ public struct ClipInfo: @unchecked Sendable {
             .timeRange, .naturalTimeScale, .minFrameDuration, .nominalFrameRate)
         let (naturalSize, transform, formats, dataRate) = try await track.load(
             .naturalSize, .preferredTransform, .formatDescriptions, .estimatedDataRate)
+        let videoByteCount = try await track.load(.totalSampleDataLength)
 
         guard timeRange.duration.isValid, timeRange.duration > .zero else { throw ClipError.emptyVideoTrack }
 
@@ -102,7 +105,8 @@ public struct ClipInfo: @unchecked Sendable {
             codec: formats.first.map { fourCC(CMFormatDescriptionGetMediaSubType($0)) } ?? "?",
             estimatedDataRate: dataRate,
             isConstantFrameRate: isConstant,
-            hasAudio: !audioTracks.isEmpty)
+            hasAudio: !audioTracks.isEmpty,
+            videoByteCount: videoByteCount)
     }
 }
 
