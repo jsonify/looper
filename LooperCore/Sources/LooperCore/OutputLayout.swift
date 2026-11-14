@@ -5,7 +5,8 @@ import Foundation
 ///
 ///     <output folder>/<clip name>/<version name>/video.mp4
 ///
-/// In M2 the version name is the duration ("8h", "1h30m"); presets name it in M4.
+/// A `Version`'s name ("8h Sleep") names its folder; unnamed versions and the M2
+/// single export use the duration ("8h", "1h30m"). `Job` and `JobRunner` build on this.
 public enum OutputLayout {
     public static let videoFileName = "video.mp4"
 
