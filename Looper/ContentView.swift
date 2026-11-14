@@ -265,7 +265,7 @@ private struct PlaylistRow: View {
 }
 
 /// Volume, fades and (optionally) crossfade for one audio track.
-private struct TrackControls: View {
+struct TrackControls: View {
     @Binding var track: AudioTrackSettings
     var crossfade: Binding<Double>? = nil
     var crossfadeLabel = "Crossfade"
@@ -293,7 +293,7 @@ private struct TrackControls: View {
     }
 }
 
-private struct SecondsField: View {
+struct SecondsField: View {
     @Binding var value: Double
 
     var body: some View {
@@ -356,6 +356,7 @@ private struct OutputSection: View {
 
 private struct ExportSection: View {
     @Environment(LooperModel.self) private var model
+    @Environment(\.openWindow) private var openWindow
     @State private var confirmReplace = false
     @State private var confirmCancel = false
 
@@ -397,6 +398,9 @@ private struct ExportSection: View {
                 Text(reason).foregroundStyle(.secondary)
             }
             Spacer()
+            Button("Preview…") { openWindow(id: "preview") }
+                .help("Play the video with its audio before exporting. Nothing is written to disk.")
+                .disabled(model.clip == nil || model.target == nil)
             Button("Export") {
                 if model.outputExists { confirmReplace = true } else { model.startExport() }
             }

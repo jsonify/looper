@@ -6,6 +6,7 @@ import SwiftUI
 struct LooperApp: App {
     @NSApplicationDelegateAdaptor private var appDelegate: AppDelegate
     @State private var model = LooperModel()
+    @State private var preview = PreviewModel()
 
     var body: some Scene {
         Window("Looper", id: "main") {
@@ -15,6 +16,15 @@ struct LooperApp: App {
         }
         // Opens at a standard size; can be resized down to the content's minimum.
         .defaultSize(width: Layout.width, height: Layout.height)
+        .windowResizability(.contentMinSize)
+
+        // Plays the layered output before exporting (opened from the main window).
+        Window("Preview", id: "preview") {
+            PreviewView()
+                .environment(model)
+                .environment(preview)
+        }
+        .defaultSize(width: 960, height: 640)
         .windowResizability(.contentMinSize)
     }
 }

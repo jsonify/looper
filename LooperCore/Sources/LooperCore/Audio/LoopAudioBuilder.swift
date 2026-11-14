@@ -6,9 +6,37 @@ struct LoopAudio {
     let composition: AVMutableComposition
     let audioMix: AVAudioMix
     let tracks: [AVMutableCompositionTrack]
+    /// What each track plays, so the mix can be rebuilt with other levels and fades
+    /// (the preview does this live) without rebuilding the timeline.
+    let mixes: [AudioTrackMix]
     /// The source files. An AVAssetTrack doesn't keep its asset alive, so the assets
     /// are held here for as long as the composition is read.
     let sourceAssets: [AVAsset]
+}
+
+/// Which part of the audio a composition track belongs to.
+public enum AudioRole: String, CaseIterable, Hashable, Sendable {
+    case bed, playlist, clipAudio
+}
+
+/// One audio composition track: its role, what plays on it and when.
+struct AudioTrackMix: Sendable {
+    let trackID: CMPersistentTrackID
+    let role: AudioRole
+    let placements: [AudioPlacement]
+    /// Names of the items `placements` index into (song file names for the playlist).
+    let itemNames: [String]
+}
+
+extension LoopAudioSettings {
+    /// Level and fades of `role`, or nil when that part isn't used.
+    public func track(for role: AudioRole) -> AudioTrackSettings? {
+        switch role {
+        case .bed: bed?.track
+        case .playlist: playlist?.track
+        case .clipAudio: clipAudio.enabled ? clipAudio.track : nil
+        }
+    }
 }
 
 /// Builds the audio timeline: the bed and playlist chained with crossfades on
@@ -21,14 +49,17 @@ enum LoopAudioBuilder {
     /// is a few ms shorter than the video don't click.
     static let clipAudioEdgeFade = 0.01
 
-    static func build(settings: LoopAudioSettings, clip: ClipInfo, plan: LoopPlan) async throws -> LoopAudio? {
+    /// - Parameter composition: where to add the audio tracks; a new composition when
+    ///   nil. The preview passes the looped video's composition so one player item
+    ///   plays both.
+    static func build(settings: LoopAudioSettings, clip: ClipInfo, plan: LoopPlan,
+                      into composition: AVMutableComposition = AVMutableComposition()) async throws -> LoopAudio? {
         let total = plan.duration.seconds
-        let composition = AVMutableComposition()
         var tracks: [AVMutableCompositionTrack] = []
-        var parameters: [AVMutableAudioMixInputParameters] = []
+        var mixes: [AudioTrackMix] = []
         var sourceAssets: [AVAsset] = []
 
-        func addChain(items: [AudioItem], crossfade: Double, track settings: AudioTrackSettings) async throws {
+        func addChain(items: [AudioItem], crossfade: Double, role: AudioRole) async throws {
             let placements = AudioChain.placements(itemDurations: items.map(\.seconds), crossfade: crossfade, fill: total)
             let sources = try await items.asyncMap { try await sourceTrack(for: $0.url) }
             sourceAssets += sources.map(\.asset)
@@ -43,17 +74,18 @@ enum LoopAudioBuilder {
                     try insert(source.track, from: from, length: p.length, at: p.start, into: track)
                 }
                 tracks.append(track)
-                parameters.append(mixParameters(for: track, placements: onTrack, settings: settings, total: total))
+                mixes.append(AudioTrackMix(trackID: track.trackID, role: role, placements: onTrack,
+                                           itemNames: items.map(\.name)))
             }
         }
 
         if let bed = settings.bed {
             let item = try await AudioItem.load(from: bed.file).trimmed(bed.trim)
-            try await addChain(items: [item], crossfade: bed.wrapCrossfade, track: bed.track)
+            try await addChain(items: [item], crossfade: bed.wrapCrossfade, role: .bed)
         }
         if let playlist = settings.playlist {
             let items = try await FolderAudioSource(folder: playlist.folder).items()
-            try await addChain(items: items, crossfade: playlist.crossfade, track: playlist.track)
+            try await addChain(items: items, crossfade: playlist.crossfade, role: .playlist)
         }
         if settings.clipAudio.enabled, clip.hasAudio {
             let source = try await sourceTrack(for: clip.url)
@@ -71,13 +103,28 @@ enum LoopAudioBuilder {
                                                  fadeOut: index == plan.copyCount - 1 ? 0 : edge))
             }
             tracks.append(track)
-            parameters.append(mixParameters(for: track, placements: placements, settings: settings.clipAudio.track, total: total))
+            mixes.append(AudioTrackMix(trackID: track.trackID, role: .clipAudio, placements: placements,
+                                       itemNames: [clip.url.lastPathComponent]))
         }
 
         guard !tracks.isEmpty else { return nil }
+        let mix = audioMix(for: mixes, total: total) { settings.track(for: $0) }
+        return LoopAudio(composition: composition, audioMix: mix, tracks: tracks, mixes: mixes,
+                         sourceAssets: sourceAssets)
+    }
+
+    /// The volume ramps for `mixes`, with each role's level and fades from `settings`
+    /// (silent where it returns nil). Tracks are matched by ID, so the mix also works on
+    /// a copy of the composition.
+    static func audioMix(for mixes: [AudioTrackMix], total: Double,
+                         settings: (AudioRole) -> AudioTrackSettings?) -> AVMutableAudioMix {
         let mix = AVMutableAudioMix()
-        mix.inputParameters = parameters
-        return LoopAudio(composition: composition, audioMix: mix, tracks: tracks, sourceAssets: sourceAssets)
+        mix.inputParameters = mixes.map { track in
+            let silent = AudioTrackSettings(volume: 0, fadeIn: 0, fadeOut: 0)
+            return mixParameters(for: track.trackID, placements: track.placements,
+                                 settings: settings(track.role) ?? silent, total: total)
+        }
+        return mix
     }
 
     private struct Source {
@@ -116,9 +163,10 @@ enum LoopAudioBuilder {
         try track.insertTimeRange(CMTimeRange(start: sourceStart, duration: time(length, roundingDown: true)), of: source, at: at)
     }
 
-    private static func mixParameters(for track: AVMutableCompositionTrack, placements: [AudioPlacement],
+    private static func mixParameters(for trackID: CMPersistentTrackID, placements: [AudioPlacement],
                                       settings: AudioTrackSettings, total: Double) -> AVMutableAudioMixInputParameters {
-        let parameters = AVMutableAudioMixInputParameters(track: track)
+        let parameters = AVMutableAudioMixInputParameters()
+        parameters.trackID = trackID
         let points = GainEnvelope.points(for: placements, volume: settings.volume,
                                          fadeIn: settings.fadeIn, fadeOut: settings.fadeOut, total: total)
         guard let first = points.first else { return parameters }
