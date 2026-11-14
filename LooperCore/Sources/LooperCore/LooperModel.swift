@@ -65,7 +65,15 @@ public final class LooperModel {
 
     /// Bed, playlist and clip audio settings for the next export.
     public var audio = LoopAudioSettings()
+    /// The bed as it will play (trimmed when `trimBedSilence` is on).
     public private(set) var bedItem: AudioItem?
+    /// Silence found at the start or end of the bed file, if any.
+    public private(set) var bedSilence: AudioTrim?
+    /// Loop only the audible part of the bed. On by default: a recording's silent
+    /// lead-in would otherwise play at every wrap.
+    public var trimBedSilence = true {
+        didSet { applyBedTrim() }
+    }
     public private(set) var playlistItems: [AudioItem] = []
     public private(set) var audioError: String?
 
@@ -170,10 +178,14 @@ public final class LooperModel {
     public var audioNotes: [String] {
         var notes: [String] = []
         if let bed = bedItem {
+            if bed.isFromVideo {
+                notes.append("The bed uses the sound from this video; its picture is ignored.")
+            }
             if bed.seconds < 60 {
                 notes.append("The bed is \(Int(bed.seconds)) s long, so its repetition may be audible. Beds of 5–10 minutes work best.")
             }
-            if !bed.isLossless { notes.append("The bed is already compressed (\(bed.codec.trimmingCharacters(in: .whitespaces))); a lossless file (WAV, AIFF, FLAC) avoids encoding it twice.") }
+            // A recording's sound is compressed already and can't be had any other way.
+            if !bed.isLossless, !bed.isFromVideo { notes.append("The bed is already compressed (\(bed.codec.trimmingCharacters(in: .whitespaces))); a lossless file (WAV, AIFF, FLAC) avoids encoding it twice.") }
         }
         let lossy = playlistItems.filter { !$0.isLossless }
         if !lossy.isEmpty {
@@ -267,13 +279,34 @@ public final class LooperModel {
         exportTask?.cancel()
     }
 
-    /// Uses `url` as the ambient bed, keeping the current level and fades.
+    /// e.g. "Trimmed 0.8 s of silence at the start." (nil when there's none to trim).
+    public var bedSilenceSummary: String? {
+        guard let silence = bedSilence, let file = bedFileItem else { return nil }
+        let format = FloatingPointFormatStyle<Double>.number.precision(.fractionLength(1))
+        var parts: [String] = []
+        if silence.start > 0 { parts.append("\(silence.start.formatted(format)) s at the start") }
+        let atEnd = file.fileSeconds - silence.end
+        if atEnd > 0.001 { parts.append("\(atEnd.formatted(format)) s at the end") }
+        guard !parts.isEmpty else { return nil }
+        return "\(trimBedSilence ? "Trimmed" : "Found") silence: " + parts.joined(separator: " and ") + "."
+    }
+
+    /// The bed file untrimmed, kept so the trim can be switched off and on.
+    @ObservationIgnored private var bedFileItem: AudioItem?
+
+    /// Uses `url` as the ambient bed, keeping the current level and fades. `url` can be
+    /// an audio file or a video with sound (only its audio is used). Silence at its
+    /// start and end is found here, once, so the export doesn't have to scan it again.
     public func chooseBed(_ url: URL) async {
         do {
             let item = try await AudioItem.load(from: url)
-            bedItem = item
+            // Not finding silence (or failing to scan) just means looping the whole file.
+            let silence = try? await SilenceTrim.detect(in: url)
+            bedFileItem = item
+            bedSilence = silence
             audio.bed = BedSettings(file: url, track: audio.bed?.track ?? BedSettings.defaultTrack,
                                     wrapCrossfade: audio.bed?.wrapCrossfade ?? BedSettings.defaultWrapCrossfade)
+            applyBedTrim()
             audioError = nil
         } catch {
             audioError = error.localizedDescription
@@ -283,6 +316,15 @@ public final class LooperModel {
     public func removeBed() {
         audio.bed = nil
         bedItem = nil
+        bedFileItem = nil
+        bedSilence = nil
+    }
+
+    private func applyBedTrim() {
+        guard let file = bedFileItem, audio.bed != nil else { return }
+        let trim = trimBedSilence ? bedSilence : nil
+        audio.bed?.trim = trim
+        bedItem = file.trimmed(trim)
     }
 
     /// Uses the audio files in `folder` as the playlist, keeping the current level and fades.

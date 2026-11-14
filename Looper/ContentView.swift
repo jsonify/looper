@@ -178,6 +178,7 @@ private struct BedRow: View {
     @State private var isChoosing = false
 
     var body: some View {
+        @Bindable var model = model
         LabeledContent("Ambient bed") {
             HStack {
                 if let bed = model.bedItem {
@@ -188,10 +189,20 @@ private struct BedRow: View {
                     Text("None").foregroundStyle(.secondary)
                 }
                 Button("Choose…") { isChoosing = true }
+                    .help("An audio file, or a video with sound (such as a screen recording of a sound website). Only the sound is used.")
             }
         }
-        .fileImporter(isPresented: $isChoosing, allowedContentTypes: [.audio]) { result in
+        // Videos too: their sound becomes the bed and the picture is ignored.
+        .fileImporter(isPresented: $isChoosing, allowedContentTypes: [.audio, .audiovisualContent]) { result in
             if case .success(let url) = result { Task { await model.chooseBed(url) } }
+        }
+        if model.bedSilence != nil {
+            Toggle("Trim silence at the start and end", isOn: $model.trimBedSilence)
+                .help("A recording often starts with a moment of silence, which would play every time the bed loops.")
+                .padding(.leading, 16)
+            if let summary = model.bedSilenceSummary {
+                Text(summary).font(.callout).foregroundStyle(.secondary).padding(.leading, 16)
+            }
         }
     }
 }

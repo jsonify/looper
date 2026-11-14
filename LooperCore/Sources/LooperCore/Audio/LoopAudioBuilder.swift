@@ -38,7 +38,9 @@ enum LoopAudioBuilder {
                 let track = try addTrack(to: composition)
                 for p in onTrack {
                     let source = sources[p.itemIndex]
-                    try insert(source.track, from: source.start, length: p.length, at: p.start, into: track)
+                    // A trimmed item (a bed with its silent lead-in removed) starts part way in.
+                    let from = source.start + time(items[p.itemIndex].start)
+                    try insert(source.track, from: from, length: p.length, at: p.start, into: track)
                 }
                 tracks.append(track)
                 parameters.append(mixParameters(for: track, placements: onTrack, settings: settings, total: total))
@@ -46,7 +48,7 @@ enum LoopAudioBuilder {
         }
 
         if let bed = settings.bed {
-            let item = try await AudioItem.load(from: bed.file)
+            let item = try await AudioItem.load(from: bed.file).trimmed(bed.trim)
             try await addChain(items: [item], crossfade: bed.wrapCrossfade, track: bed.track)
         }
         if let playlist = settings.playlist {

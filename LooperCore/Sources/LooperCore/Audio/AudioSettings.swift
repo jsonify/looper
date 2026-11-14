@@ -16,9 +16,13 @@ public struct AudioTrackSettings: Codable, Equatable, Sendable {
     }
 }
 
-/// The ambient bed: one file looped for the whole video.
+/// The ambient bed: one file looped for the whole video. The file can be audio or a
+/// video with sound (e.g. a screen recording of a sound website); only its audio is used.
 public struct BedSettings: Codable, Equatable, Sendable {
     public var file: URL
+    /// The part of the file to loop, e.g. without the silence at the start of a
+    /// recording (see `SilenceTrim`). nil loops the whole file.
+    public var trim: AudioTrim?
     public var track: AudioTrackSettings
     /// Overlap where the bed wraps around to its start, seconds.
     public var wrapCrossfade: Double
@@ -26,8 +30,10 @@ public struct BedSettings: Codable, Equatable, Sendable {
     public static let defaultTrack = AudioTrackSettings(volume: 0.6, fadeIn: 5, fadeOut: 10)
     public static let defaultWrapCrossfade = 3.0
 
-    public init(file: URL, track: AudioTrackSettings = defaultTrack, wrapCrossfade: Double = defaultWrapCrossfade) {
+    public init(file: URL, trim: AudioTrim? = nil, track: AudioTrackSettings = defaultTrack,
+                wrapCrossfade: Double = defaultWrapCrossfade) {
         self.file = file
+        self.trim = trim
         self.track = track
         self.wrapCrossfade = wrapCrossfade
     }
