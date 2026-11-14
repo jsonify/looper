@@ -6,6 +6,9 @@ struct LoopAudio {
     let composition: AVMutableComposition
     let audioMix: AVAudioMix
     let tracks: [AVMutableCompositionTrack]
+    /// The source files. An AVAssetTrack doesn't keep its asset alive, so the assets
+    /// are held here for as long as the composition is read.
+    let sourceAssets: [AVAsset]
 }
 
 /// Builds the audio timeline: the bed and playlist chained with crossfades on
@@ -23,10 +26,12 @@ enum LoopAudioBuilder {
         let composition = AVMutableComposition()
         var tracks: [AVMutableCompositionTrack] = []
         var parameters: [AVMutableAudioMixInputParameters] = []
+        var sourceAssets: [AVAsset] = []
 
         func addChain(items: [AudioItem], crossfade: Double, track settings: AudioTrackSettings) async throws {
             let placements = AudioChain.placements(itemDurations: items.map(\.seconds), crossfade: crossfade, fill: total)
             let sources = try await items.asyncMap { try await sourceTrack(for: $0.url) }
+            sourceAssets += sources.map(\.asset)
             for trackIndex in 0..<2 {
                 let onTrack = placements.filter { $0.track == trackIndex }
                 guard !onTrack.isEmpty else { continue }
@@ -50,6 +55,7 @@ enum LoopAudioBuilder {
         }
         if settings.clipAudio.enabled, clip.hasAudio {
             let source = try await sourceTrack(for: clip.url)
+            sourceAssets.append(source.asset)
             let audioLength = source.duration
             let track = try addTrack(to: composition)
             var placements: [AudioPlacement] = []
@@ -69,10 +75,11 @@ enum LoopAudioBuilder {
         guard !tracks.isEmpty else { return nil }
         let mix = AVMutableAudioMix()
         mix.inputParameters = parameters
-        return LoopAudio(composition: composition, audioMix: mix, tracks: tracks)
+        return LoopAudio(composition: composition, audioMix: mix, tracks: tracks, sourceAssets: sourceAssets)
     }
 
     private struct Source {
+        let asset: AVURLAsset
         let track: AVAssetTrack
         let start: CMTime
         let duration: Double
@@ -84,7 +91,7 @@ enum LoopAudioBuilder {
             throw AudioSourceError.noAudio(url.lastPathComponent)
         }
         let range = try await track.load(.timeRange)
-        return Source(track: track, start: range.start, duration: range.duration.seconds)
+        return Source(asset: asset, track: track, start: range.start, duration: range.duration.seconds)
     }
 
     private static func addTrack(to composition: AVMutableComposition) throws -> AVMutableCompositionTrack {
@@ -104,7 +111,7 @@ enum LoopAudioBuilder {
         if end.isValid, at > end {
             track.insertEmptyTimeRange(CMTimeRange(start: end, end: at))
         }
-        try track.insertTimeRange(CMTimeRange(start: sourceStart, duration: time(length)), of: source, at: at)
+        try track.insertTimeRange(CMTimeRange(start: sourceStart, duration: time(length, roundingDown: true)), of: source, at: at)
     }
 
     private static func mixParameters(for track: AVMutableCompositionTrack, placements: [AudioPlacement],
@@ -121,8 +128,9 @@ enum LoopAudioBuilder {
         return parameters
     }
 
-    static func time(_ seconds: Double) -> CMTime {
-        CMTime(value: CMTimeValue((seconds * Double(timescale)).rounded()), timescale: timescale)
+    static func time(_ seconds: Double, roundingDown: Bool = false) -> CMTime {
+        let units = seconds * Double(timescale)
+        return CMTime(value: CMTimeValue(roundingDown ? units.rounded(.down) : units.rounded()), timescale: timescale)
     }
 }
 

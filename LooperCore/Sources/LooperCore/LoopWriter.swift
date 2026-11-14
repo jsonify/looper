@@ -81,7 +81,8 @@ public struct LoopWriter: Sendable {
             reader.timeRange = CMTimeRange(start: .zero, duration: plan.duration)
             // Audio starts with the first shown frame, which sits at mediaStart.
             pumps.append(SamplePump(input: audioInput, label: "audio", source: AudioReaderSource(
-                reader: reader, output: output, offset: mediaStart, reporter: reporter, stream: 1)))
+                reader: reader, output: output, offset: mediaStart, reporter: reporter, stream: 1,
+                keepAlive: loopAudio)))
         } else {
             reporter.finishStream(1)
         }
@@ -253,9 +254,13 @@ private final class AudioReaderSource: SampleSource {
     private let offset: CMTime
     private let reporter: ProgressReporter
     private let stream: Int
+    /// Holds the audio composition and its source assets while reading.
+    private let keepAlive: LoopAudio
     private var started = false
 
-    init(reader: AVAssetReader, output: AVAssetReaderAudioMixOutput, offset: CMTime, reporter: ProgressReporter, stream: Int) {
+    init(reader: AVAssetReader, output: AVAssetReaderAudioMixOutput, offset: CMTime, reporter: ProgressReporter,
+         stream: Int, keepAlive: LoopAudio) {
+        self.keepAlive = keepAlive
         self.reader = reader
         self.output = output
         self.offset = offset
