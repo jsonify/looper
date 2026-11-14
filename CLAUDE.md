@@ -47,6 +47,15 @@ A macOS app that takes a short, seamless video loop (for example a 30-second amb
 - Keep the code readable, with small types and clear names. Explain non-obvious AVFoundation choices in short comments.
 - Before calling a milestone done, run its tests and report results, not just a successful build.
 
+## Project layout and fixtures
+
+- `LooperCore/` is a Swift package (macOS 14+, Swift 6 language mode) with the engine and its tests (Swift Testing). It must not import SwiftUI or AppKit.
+- `Looper/` + `Looper.xcodeproj` is the app. The project uses an Xcode 16 synchronized folder, so files added under `Looper/` need no project edits. Release builds are universal (arm64 + x86_64).
+- `scripts/make-test-clip.sh` writes fixtures to `fixtures/` (or `$LOOPER_FIXTURES`): 30 s loops at 1080p30, tiny 320x180 30 fps (for 8 h tests), 360p at 24 fps and 29.97 fps, 360p30 with a stereo AAC track, plus a 10 s pink-noise bed WAV and a playlist folder of three 6 s tones (WAV, AIFF, FLAC). All 48 kHz stereo.
+- Every fixture frame carries its index in binary: 16 black/white square blocks along the top-left edge (block 0 = least significant bit). Tests read it with `FrameID.decode` (`LooperCoreTests/Support/MediaInspection.swift`) to check seams frame by frame without OCR. Block sizes and frame counts live in both the script and `Support/Fixtures.swift`; keep them in sync. Changing the script changes the CI cache key, so fixtures regenerate automatically.
+- Environment variables for tests: `LOOPER_FIXTURES` (fixture folder), `LOOPER_REQUIRE_FIXTURES=1` (missing fixtures fail instead of skip; set in CI), `LOOPER_LONG_TESTS=1` (run 8 h export tests; set in CI on `main` and manual runs).
+- Cloud Claude sessions run on Linux without Swift or AVFoundation: Swift changes there are verified by CI, not locally. ffmpeg is available there for checking fixtures.
+
 ## Product spec
 
 Product decisions (scope, publish kit, job/version model, audio sourcing, targets) and their reasons live in `docs/plans/looper-spec.md`. Read it before starting a milestone; where it and this file differ, the spec is newer.
