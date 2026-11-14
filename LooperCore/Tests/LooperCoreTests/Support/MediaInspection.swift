@@ -31,11 +31,12 @@ enum MediaInspection {
         return count
     }
 
-    /// Decodes every frame and returns the frame index drawn into each one, in
-    /// presentation order (see `FrameID`).
-    static func frameIDs(of asset: AVAsset, bitBlock: Int) async throws -> [Int] {
+    /// Decodes frames and returns the frame index drawn into each one, in presentation
+    /// order (see `FrameID`). Pass `timeRange` to decode only part of the asset.
+    static func frameIDs(of asset: AVAsset, bitBlock: Int, timeRange: CMTimeRange? = nil) async throws -> [Int] {
         let track = try await videoTrack(of: asset)
         let reader = try AVAssetReader(asset: asset)
+        if let timeRange { reader.timeRange = timeRange }
         // Full-range 4:2:0 gives direct access to an 8-bit luma plane.
         let output = AVAssetReaderTrackOutput(track: track, outputSettings: [
             kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarFullRange,
@@ -50,6 +51,110 @@ enum MediaInspection {
         }
         if reader.status == .failed { throw failure(reader) }
         return ids
+    }
+
+    /// Presentation times of the decoded frames, in display order. Raw compressed
+    /// samples aren't used here: a trimmed copy can carry an extra sample that the
+    /// decoder needs but the edit list hides, and raw timestamps include each copy's
+    /// B-frame offset. Decoded frames are what a player actually shows.
+    static func decodedFrameTimes(of asset: AVAsset) async throws -> [CMTime] {
+        let track = try await videoTrack(of: asset)
+        let reader = try AVAssetReader(asset: asset)
+        let output = AVAssetReaderTrackOutput(track: track, outputSettings: [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarFullRange,
+        ])
+        output.alwaysCopiesSampleData = false
+        reader.add(output)
+        guard reader.startReading() else { throw failure(reader) }
+        var times: [CMTime] = []
+        while let sample = output.copyNextSampleBuffer() {
+            guard CMSampleBufferGetImageBuffer(sample) != nil else { continue }
+            times.append(CMSampleBufferGetPresentationTimeStamp(sample))
+        }
+        if reader.status == .failed { throw failure(reader) }
+        return times
+    }
+
+    /// A hash of each compressed video sample's bytes, in decode order. Equal hashes
+    /// between output and source mean the samples were copied, not re-encoded.
+    static func videoSampleHashes(of asset: AVAsset) async throws -> [Int] {
+        try await compressedVideoSamples(of: asset) { sample in
+            guard let block = CMSampleBufferGetDataBuffer(sample) else { return 0 }
+            let length = CMBlockBufferGetDataLength(block)
+            var bytes = [UInt8](repeating: 0, count: length)
+            CMBlockBufferCopyDataBytes(block, atOffset: 0, dataLength: length, destination: &bytes)
+            var hasher = Hasher()
+            hasher.combine(bytes)
+            return hasher.finalize()
+        }
+    }
+
+    private static func compressedVideoSamples<T>(
+        of asset: AVAsset, _ transform: (CMSampleBuffer) -> T
+    ) async throws -> [T] {
+        let track = try await videoTrack(of: asset)
+        let reader = try AVAssetReader(asset: asset)
+        let output = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
+        output.alwaysCopiesSampleData = false
+        reader.add(output)
+        guard reader.startReading() else { throw failure(reader) }
+        var results: [T] = []
+        while let sample = output.copyNextSampleBuffer() {
+            guard CMSampleBufferGetNumSamples(sample) > 0 else { continue }
+            results.append(transform(sample))
+        }
+        if reader.status == .failed { throw failure(reader) }
+        return results
+    }
+
+    /// Codec, sample rate and channel count of an audio track.
+    static func audioFormat(of track: AVAssetTrack) async throws -> (codec: String, sampleRate: Double, channels: Int) {
+        let descriptions = try await track.load(.formatDescriptions)
+        guard let description = descriptions.first,
+              let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(description)?.pointee else {
+            return ("?", 0, 0)
+        }
+        let code = CMFormatDescriptionGetMediaSubType(description)
+        let codec = String(decoding: [24, 16, 8, 0].map { UInt8((code >> $0) & 0xFF) }, as: UTF8.self)
+        return (codec, asbd.mSampleRate, Int(asbd.mChannelsPerFrame))
+    }
+
+    /// RMS level of an audio track (decoded to 48 kHz stereo float) inside each window,
+    /// given in seconds of track time.
+    static func audioRMS(of track: AVAssetTrack, in asset: AVAsset, windows: [ClosedRange<Double>]) async throws -> [Double] {
+        let reader = try AVAssetReader(asset: asset)
+        let sampleRate = 48_000.0
+        let output = AVAssetReaderTrackOutput(track: track, outputSettings: [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: sampleRate,
+            AVNumberOfChannelsKey: 2,
+            AVLinearPCMBitDepthKey: 32,
+            AVLinearPCMIsFloatKey: true,
+            AVLinearPCMIsBigEndianKey: false,
+            AVLinearPCMIsNonInterleaved: false,
+        ])
+        reader.add(output)
+        guard reader.startReading() else { throw failure(reader) }
+        var sums = [Double](repeating: 0, count: windows.count)
+        var counts = [Int](repeating: 0, count: windows.count)
+        while let sample = output.copyNextSampleBuffer() {
+            guard let block = CMSampleBufferGetDataBuffer(sample) else { continue }
+            let start = CMSampleBufferGetPresentationTimeStamp(sample).seconds
+            let length = CMBlockBufferGetDataLength(block)
+            var floats = [Float](repeating: 0, count: length / MemoryLayout<Float>.size)
+            floats.withUnsafeMutableBytes { raw in
+                _ = CMBlockBufferCopyDataBytes(block, atOffset: 0, dataLength: length, destination: raw.baseAddress!)
+            }
+            for (index, value) in floats.enumerated() {
+                let time = start + Double(index / 2) / sampleRate
+                for (w, window) in windows.enumerated() where window.contains(time) {
+                    sums[w] += Double(value) * Double(value)
+                    counts[w] += 1
+                }
+            }
+        }
+        if reader.status == .failed { throw failure(reader) }
+        return zip(sums, counts).map { $1 > 0 ? ($0 / Double($1)).squareRoot() : 0 }
     }
 
     private static func failure(_ reader: AVAssetReader) -> Error {

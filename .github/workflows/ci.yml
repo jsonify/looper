@@ -40,8 +40,8 @@ jobs:
           path: fixtures
           key: fixtures-${{ runner.os }}-${{ hashFiles('scripts/make-test-clip.sh') }}
 
+      # Always installed: tests cross-check exports with ffmpeg/ffprobe.
       - name: Install ffmpeg
-        if: steps.fixtures.outputs.cache-hit != 'true'
         run: command -v ffmpeg || brew install ffmpeg
 
       - name: Generate fixtures
@@ -51,6 +51,7 @@ jobs:
       - name: Test
         env:
           LOOPER_REQUIRE_FIXTURES: "1"
+          LOOPER_REQUIRE_FFMPEG: "1"
         run: swift test --package-path LooperCore
 
   app-build:

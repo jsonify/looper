@@ -10,9 +10,11 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: [
         .library(name: "LooperCore", targets: ["LooperCore"]),
+        .executable(name: "looper", targets: ["LooperCLI"]),
     ],
     targets: [
         .target(name: "LooperCore"),
+        .executableTarget(name: "LooperCLI", dependencies: ["LooperCore"]),
         .testTarget(name: "LooperCoreTests", dependencies: ["LooperCore"]),
     ]
 )
