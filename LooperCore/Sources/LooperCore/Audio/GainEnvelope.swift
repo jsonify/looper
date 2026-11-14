@@ -17,34 +17,47 @@ public enum GainEnvelope {
     /// Linear ramps per curved stretch; 8 keeps the equal-power error under ~1 %.
     public static let stepsPerCurve = 8
 
+    /// Built piece by piece, so the cost grows linearly with the number of pieces
+    /// (an 8 h playlist of short songs has thousands).
     public static func points(
         for placements: [AudioPlacement], volume: Float, fadeIn: Double, fadeOut: Double, total: Double
     ) -> [Point] {
-        guard !placements.isEmpty else { return [] }
-        var times: [Double] = [0, total]
-        func curve(_ from: Double, _ length: Double) {
-            guard length > 0 else { return }
-            for step in 0...stepsPerCurve { times.append(from + length * Double(step) / Double(stepsPerCurve)) }
+        let pieces = placements.sorted { $0.start < $1.start }
+        guard let first = pieces.first else { return [] }
+        func curve(_ from: Double, _ length: Double) -> [Double] {
+            guard length > 0 else { return [] }
+            return (0...stepsPerCurve).map { from + length * Double($0) / Double(stepsPerCurve) }
         }
-        for p in placements {
-            times += [p.start, p.end]
-            curve(p.start, p.fadeIn)
-            curve(p.end - p.fadeOut, p.fadeOut)
-        }
-        curve(0, min(fadeIn, total))
-        curve(max(total - fadeOut, 0), min(fadeOut, total))
+        // Track fade in/out points: few, so each piece just filters them.
+        let trackFadeTimes = curve(0, min(fadeIn, total)) + curve(max(total - fadeOut, 0), min(fadeOut, total))
 
-        let sorted = times.filter { $0 >= 0 && $0 <= total }.sorted()
-        var unique: [Double] = []
-        for t in sorted where unique.last.map({ t - $0 > 1e-6 }) ?? true { unique.append(t) }
-        return unique.map { Point(time: $0, gain: gain(at: $0, placements: placements, volume: volume,
-                                                      fadeIn: fadeIn, fadeOut: fadeOut, total: total)) }
+        var result: [Point] = []
+        if first.start > 0 { result.append(Point(time: 0, gain: 0)) }
+        for piece in pieces {
+            var times = [piece.start, piece.end]
+                + curve(piece.start, piece.fadeIn)
+                + curve(piece.end - piece.fadeOut, piece.fadeOut)
+                + trackFadeTimes.filter { $0 > piece.start && $0 < piece.end }
+            times = times.filter { $0 >= 0 && $0 <= total }.sorted()
+            for t in times where result.last.map({ t - $0.time > 1e-6 }) ?? true {
+                result.append(Point(time: t, gain: gain(at: t, in: piece, volume: volume,
+                                                        fadeIn: fadeIn, fadeOut: fadeOut, total: total)))
+            }
+        }
+        return result
     }
 
+    /// Gain at `t` on a track, looking up which piece is playing (0 between pieces).
     static func gain(at t: Double, placements: [AudioPlacement], volume: Float,
                      fadeIn: Double, fadeOut: Double, total: Double) -> Float {
         // The piece playing at t on this track (pieces on one track never overlap).
-        guard let p = placements.first(where: { t >= $0.start - 1e-9 && t <= $0.end + 1e-9 }) else { return 0 }
+        guard let piece = placements.first(where: { t >= $0.start - 1e-9 && t <= $0.end + 1e-9 }) else { return 0 }
+        return gain(at: t, in: piece, volume: volume, fadeIn: fadeIn, fadeOut: fadeOut, total: total)
+    }
+
+    /// Gain at `t` within `piece`: volume × crossfade weight × track fade.
+    static func gain(at t: Double, in p: AudioPlacement, volume: Float,
+                     fadeIn: Double, fadeOut: Double, total: Double) -> Float {
         var weight = 1.0
         if p.fadeIn > 0, t < p.start + p.fadeIn { weight *= fadeInCurve((t - p.start) / p.fadeIn) }
         if p.fadeOut > 0, t > p.end - p.fadeOut { weight *= fadeOutCurve((t - (p.end - p.fadeOut)) / p.fadeOut) }
