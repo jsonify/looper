@@ -46,6 +46,7 @@ A macOS app that takes a short, seamless video loop (for example a 30-second amb
 
 - Keep the code readable, with small types and clear names. Explain non-obvious AVFoundation choices in short comments.
 - Before calling a milestone done, run its tests and report results, not just a successful build.
+- Git workflow: always merge after a pull request. Work on a branch, open a PR, and once CI is green merge it into `main` rather than leaving it open. Close the issues the work resolves once CI is green.
 
 ## Project layout and fixtures
 
