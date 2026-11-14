@@ -13,7 +13,7 @@ A personal macOS app that turns a short seamless video loop plus audio into fini
 - **8 h testing is layered so it stays cheap:**
   - Seam drift: build a 960-insert composition and check every insert time exactly, with no export (CI, milliseconds).
   - Long-run memory and duration: export 8 h from a tiny low-bitrate clip, a few hundred MB (CI).
-  - Full-size 8 h export: once per milestone on the Mac, checking speed, memory, file size and the time-remaining estimate.
+  - Full-size 8 h export: once per milestone on the Mac, checking speed, memory, file size and the time-remaining estimate. The **Intel Mac is the speed benchmark**: if exports take minutes there, they take minutes everywhere. CI runners are Apple Silicon, so the Intel Mac is also where Intel behaviour gets tested.
   - Why 8 h at all: it is the longest real output, and drift, leaks and large-file MP4 handling only show up at that scale.
 - **v1 = milestones 1–3** (core extend, basic UI, audio), because ambient videos need sound. The check "does passthrough export honour `AVAudioMix`?" is done as a quick test inside milestone 1 so the export path (passthrough vs reader/writer) is decided once.
 - **Audio model: ambient bed + music playlist.** Track 1 is a looped bed with a wrap crossfade. Track 2 is a folder of tracks chained in order, cycling to fill the duration. Lossless inputs (WAV/AIFF/FLAC) are preferred so AAC encoding happens once.
@@ -34,8 +34,8 @@ A personal macOS app that turns a short seamless video loop plus audio into fini
 
 ## Assumptions
 
-- **macOS 14+ minimum**, assumed because the user didn't give a version. It allows the async AVFoundation loading APIs and SwiftUI's Observation framework.
-- **Moving the app between the user's Macs:** `scripts/package.sh` builds a Release, signs it ad hoc and zips it. On the receiving Mac, clear quarantine once (`xattr -dr com.apple.quarantine Looper.app`). Building from the repo on each Mac also works.
+- **macOS 14+ minimum.** The user's main Mac runs macOS 15.4.1. 14+ allows the async AVFoundation loading APIs and SwiftUI's Observation framework.
+- **Moving the app between the user's Macs:** `scripts/package.sh` builds a Release **universal binary (arm64 + x86_64)**, because the main Mac is Intel and the others are Apple Silicon. It signs the app ad hoc (Apple Silicon refuses unsigned code; ad hoc is enough) and zips it. On the receiving Mac, clear quarantine once (`xattr -dr com.apple.quarantine Looper.app`). Building from the repo on each Mac also works.
 - **Presets portable between Macs:** stored as JSON files in a user-chosen folder (for example iCloud Drive), with music folders referenced relative to that folder.
 - **Volume is a handful of videos per week**, which doesn't change the design (the user didn't give a number).
 
@@ -50,7 +50,7 @@ A personal macOS app that turns a short seamless video loop plus audio into fini
 - **Playlist behaviour:** gap or crossfade between songs, shuffle vs fixed order, and whether a cycle may repeat within one video. Settle in milestone 3.
 - **Song-to-song crossfade length** and the bed's wrap crossfade length (likely 2–5 s). Settle by listening tests.
 - **Metadata template contents** (description boilerplate, tag lists per mode). The user supplies these when the publish kit is built.
-- **The user's macOS version.** Confirm it's 14 or later.
+- **Video fade to black without re-encoding 8 h.** Only the last stretch needs re-encoding. Plan: pass every copy through except the faded tail, re-encode just that tail with matching encoder settings, and join them. Check in milestone 4 that the join plays cleanly. Hardware encoding through VideoToolbox is available on both Intel and Apple Silicon Macs.
 
 ## Next steps
 
