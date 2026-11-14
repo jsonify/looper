@@ -13,7 +13,9 @@ struct LooperApp: App {
                 .environment(model)
                 .onAppear { appDelegate.model = model }
         }
-        .windowResizability(.contentSize)
+        // Opens at a standard size; can be resized down to the content's minimum.
+        .defaultSize(width: Layout.width, height: Layout.height)
+        .windowResizability(.contentMinSize)
     }
 }
 
