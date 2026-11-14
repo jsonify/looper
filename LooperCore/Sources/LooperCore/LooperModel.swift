@@ -6,6 +6,7 @@ public protocol LoopExporting: Sendable {
     func export(
         clip: ClipInfo,
         plan: LoopPlan,
+        audio: LoopAudioSettings?,
         to outputURL: URL,
         overwrite: Bool,
         progress: @escaping @Sendable (ExportProgress) -> Void
@@ -14,10 +15,11 @@ public protocol LoopExporting: Sendable {
 
 extension LoopWriter: LoopExporting {
     public func export(
-        clip: ClipInfo, plan: LoopPlan, to outputURL: URL, overwrite: Bool,
+        clip: ClipInfo, plan: LoopPlan, audio: LoopAudioSettings?, to outputURL: URL, overwrite: Bool,
         progress: @escaping @Sendable (ExportProgress) -> Void
     ) async throws {
-        try await export(clip: clip, plan: plan, fileType: .mp4, to: outputURL, overwrite: overwrite, progress: progress)
+        try await export(clip: clip, plan: plan, audio: audio, fileType: .mp4, to: outputURL,
+                         overwrite: overwrite, progress: progress)
     }
 }
 
@@ -58,6 +60,14 @@ public final class LooperModel {
     public var outputFolder: URL? {
         didSet { defaults.set(outputFolder?.path, forKey: Self.outputFolderKey) }
     }
+
+    // MARK: Audio
+
+    /// Bed, playlist and clip audio settings for the next export.
+    public var audio = LoopAudioSettings()
+    public private(set) var bedItem: AudioItem?
+    public private(set) var playlistItems: [AudioItem] = []
+    public private(set) var audioError: String?
 
     // MARK: Export state
 
@@ -132,7 +142,44 @@ public final class LooperModel {
 
     public var estimatedBytes: Int64? {
         guard let clip, let plan else { return nil }
-        return OutputEstimate.bytes(clip: clip, plan: plan)
+        var bytes = OutputEstimate.bytes(clip: clip, plan: plan)
+        if audio.hasAudio(clipHasAudio: clip.hasAudio) {
+            bytes += Int64(Double(LoopAudioSettings.bitRate) / 8 * plan.duration.seconds)
+        }
+        return bytes
+    }
+
+    /// Audio that will actually be used (nil when the output will be silent).
+    var exportAudio: LoopAudioSettings? {
+        audio.hasAudio(clipHasAudio: clip?.hasAudio ?? false) ? audio : nil
+    }
+
+    /// e.g. "5 songs · 0:24:10 · plays 20× in 8 h".
+    public var playlistSummary: String? {
+        guard !playlistItems.isEmpty else { return nil }
+        let length = playlistItems.reduce(0) { $0 + $1.seconds }
+        var text = "\(playlistItems.count) \(playlistItems.count == 1 ? "song" : "songs") · \(Self.clock(length))"
+        if let target, length > 0 {
+            let plays = Double(target.seconds) / length
+            if plays > 1 { text += " · plays \(plays.formatted(.number.precision(.fractionLength(0...1))))× in \(target)" }
+        }
+        return text
+    }
+
+    /// Things worth knowing about the chosen audio, shown under the audio section.
+    public var audioNotes: [String] {
+        var notes: [String] = []
+        if let bed = bedItem {
+            if bed.seconds < 60 {
+                notes.append("The bed is \(Int(bed.seconds)) s long, so its repetition may be audible. Beds of 5–10 minutes work best.")
+            }
+            if !bed.isLossless { notes.append("The bed is already compressed (\(bed.codec.trimmingCharacters(in: .whitespaces))); a lossless file (WAV, AIFF, FLAC) avoids encoding it twice.") }
+        }
+        let lossy = playlistItems.filter { !$0.isLossless }
+        if !lossy.isEmpty {
+            notes.append("\(lossy.count) of the songs are already compressed; lossless files (WAV, AIFF, FLAC) avoid encoding them twice.")
+        }
+        return notes
     }
 
     public var spaceCheck: SpaceCheck? {
@@ -199,11 +246,12 @@ public final class LooperModel {
             options: [.userInitiated, .idleSystemSleepDisabled], reason: "Exporting a long video")
 
         let exporter = self.exporter
+        let audio = exportAudio
         exportTask = Task {
             do {
                 try FileManager.default.createDirectory(
                     at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try await exporter.export(clip: clip, plan: plan, to: url, overwrite: replacing) { [weak self] update in
+                try await exporter.export(clip: clip, plan: plan, audio: audio, to: url, overwrite: replacing) { [weak self] update in
                     Task { @MainActor in self?.receive(update) }
                 }
                 finish(.finished(url))
@@ -217,6 +265,42 @@ public final class LooperModel {
 
     public func cancelExport() {
         exportTask?.cancel()
+    }
+
+    /// Uses `url` as the ambient bed, keeping the current level and fades.
+    public func chooseBed(_ url: URL) async {
+        do {
+            let item = try await AudioItem.load(from: url)
+            bedItem = item
+            audio.bed = BedSettings(file: url, track: audio.bed?.track ?? BedSettings.defaultTrack,
+                                    wrapCrossfade: audio.bed?.wrapCrossfade ?? BedSettings.defaultWrapCrossfade)
+            audioError = nil
+        } catch {
+            audioError = error.localizedDescription
+        }
+    }
+
+    public func removeBed() {
+        audio.bed = nil
+        bedItem = nil
+    }
+
+    /// Uses the audio files in `folder` as the playlist, keeping the current level and fades.
+    public func choosePlaylist(_ folder: URL) async {
+        do {
+            let items = try await FolderAudioSource(folder: folder).items()
+            playlistItems = items
+            audio.playlist = PlaylistSettings(folder: folder, track: audio.playlist?.track ?? PlaylistSettings.defaultTrack,
+                                              crossfade: audio.playlist?.crossfade ?? PlaylistSettings.defaultCrossfade)
+            audioError = nil
+        } catch {
+            audioError = error.localizedDescription
+        }
+    }
+
+    public func removePlaylist() {
+        audio.playlist = nil
+        playlistItems = []
     }
 
     /// Clears a finished, failed or cancelled result.

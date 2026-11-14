@@ -7,7 +7,7 @@ struct FakeExporter: LoopExporting {
     enum Behaviour: Sendable { case succeed, fail, waitForCancel }
     let behaviour: Behaviour
 
-    func export(clip: ClipInfo, plan: LoopPlan, to outputURL: URL, overwrite: Bool,
+    func export(clip: ClipInfo, plan: LoopPlan, audio: LoopAudioSettings?, to outputURL: URL, overwrite: Bool,
                 progress: @escaping @Sendable (ExportProgress) -> Void) async throws {
         progress(ExportProgress(fractionCompleted: 0.5, estimatedTimeRemaining: 1))
         switch behaviour {
@@ -162,6 +162,46 @@ struct LooperModelTests {
         first.outputFolder = folder.url
         let second = LooperModel(defaults: defaults, exporter: FakeExporter(behaviour: .succeed))
         #expect(second.outputFolder?.standardizedFileURL == folder.url.standardizedFileURL)
+    }
+
+    @Test func audioChoicesFeedTheExport() async throws {
+        let folder = try TemporaryFolder()
+        defer { folder.remove() }
+        let model = makeModel(folder: folder)
+        await model.loadClip(from: VideoFixture.tiny.url)
+        let silentEstimate = try #require(model.estimatedBytes)
+        #expect(model.exportAudio == nil)
+
+        await model.chooseBed(AudioFixture.bed.url)
+        #expect(model.bedItem?.name == "bed.wav")
+        #expect(model.audio.bed?.file == AudioFixture.bed.url)
+        #expect(model.audioNotes.contains { $0.contains("repetition") }) // 10 s bed
+        await model.choosePlaylist(Fixtures.url(AudioFixture.playlistDirectory))
+        #expect(model.playlistItems.count == 3)
+        #expect(model.playlistSummary?.hasPrefix("3 songs · 0:00:18") == true)
+        #expect(model.exportAudio != nil)
+        // 8 h of 256 kbps AAC ≈ 921.6 MB on top of the video.
+        let withAudio = try #require(model.estimatedBytes)
+        #expect(withAudio - silentEstimate == Int64(256_000.0 / 8 * 8 * 3600))
+
+        model.removeBed()
+        model.removePlaylist()
+        #expect(model.exportAudio == nil)
+
+        await model.chooseBed(VideoFixture.tiny.url) // no audio track
+        #expect(model.audioError != nil)
+        #expect(model.audio.bed == nil)
+    }
+
+    @Test func clipAudioCountsOnlyWhenTheClipHasAudio() async throws {
+        let folder = try TemporaryFolder()
+        defer { folder.remove() }
+        let model = makeModel(folder: folder)
+        model.audio.clipAudio.enabled = true
+        await model.loadClip(from: VideoFixture.tiny.url)
+        #expect(model.exportAudio == nil)
+        await model.loadClip(from: VideoFixture.withAudio.url)
+        #expect(model.exportAudio != nil)
     }
 
     /// End to end with the real writer.

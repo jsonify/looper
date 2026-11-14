@@ -5,15 +5,28 @@ import LooperCore
 /// Command-line front end for the engine, used for benchmarks and the milestone
 /// sign-off exports on real clips:
 ///
-///     swift run -c release looper <clip> <duration> <output.mp4>
+///     swift run -c release looper <clip> <duration> <output.mp4> [--bed <file>] [--playlist <folder>] [--clip-audio]
 ///
 /// Prints progress, then wall time, peak memory and output size.
 @main
 struct LooperCLI {
     static func main() async {
-        let args = Array(CommandLine.arguments.dropFirst())
+        var args = Array(CommandLine.arguments.dropFirst())
+        var audio = LoopAudioSettings()
+        func option(_ name: String) -> String? {
+            guard let i = args.firstIndex(of: name), i + 1 < args.count else { return nil }
+            let value = args[i + 1]
+            args.removeSubrange(i...(i + 1))
+            return value
+        }
+        if let bed = option("--bed") { audio.bed = BedSettings(file: URL(fileURLWithPath: bed)) }
+        if let folder = option("--playlist") { audio.playlist = PlaylistSettings(folder: URL(fileURLWithPath: folder)) }
+        if let i = args.firstIndex(of: "--clip-audio") {
+            audio.clipAudio.enabled = true
+            args.remove(at: i)
+        }
         guard args.count == 3 else {
-            log("usage: looper <clip> <duration: h:mm:ss | 8h | 45m> <output.mp4>")
+            log("usage: looper <clip> <duration: h:mm:ss | 8h | 45m> <output.mp4> [--bed <file>] [--playlist <folder>] [--clip-audio]")
             exit(2)
         }
         let clipURL = URL(fileURLWithPath: args[0])
@@ -32,7 +45,16 @@ struct LooperCLI {
             let clock = ContinuousClock()
             let start = clock.now
             let firstEstimate = EstimateRecorder()
-            try await LoopRenderer.render(clipURL: clipURL, target: target, to: outputURL, overwrite: true) { p in
+            let hasAudio = audio.hasAudio(clipHasAudio: clip.hasAudio)
+            if hasAudio {
+                var parts: [String] = []
+                if let bed = audio.bed { parts.append("bed \(bed.file.lastPathComponent)") }
+                if let playlist = audio.playlist { parts.append("playlist \(playlist.folder.lastPathComponent)") }
+                if audio.clipAudio.enabled && clip.hasAudio { parts.append("clip audio") }
+                log("audio: " + parts.joined(separator: " + ") + " → AAC 48 kHz stereo")
+            }
+            try await LoopWriter().export(clip: clip, plan: plan, audio: hasAudio ? audio : nil,
+                                          fileType: .mp4, to: outputURL, overwrite: true) { p in
                 let percent = String(format: "%5.1f%%", p.fractionCompleted * 100)
                 let eta = p.estimatedTimeRemaining.map { "about \(format($0)) left" } ?? "estimating…"
                 if let remaining = p.estimatedTimeRemaining, p.fractionCompleted < 1 {

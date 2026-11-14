@@ -13,6 +13,7 @@ struct ContentView: View {
         Form {
             ClipSection()
             DurationSection()
+            AudioSection()
             OutputSection()
             ExportSection()
         }
@@ -132,6 +133,145 @@ private struct DurationSection: View {
             }
         }
         .disabled(model.isExporting)
+    }
+}
+
+// MARK: - Audio
+
+private struct AudioSection: View {
+    @Environment(LooperModel.self) private var model
+
+    var body: some View {
+        @Bindable var model = model
+        Section {
+            BedRow()
+            if let bed = Binding($model.audio.bed) {
+                TrackControls(track: bed.track, crossfade: bed.wrapCrossfade, crossfadeLabel: "Wrap crossfade")
+            }
+            PlaylistRow()
+            if let playlist = Binding($model.audio.playlist) {
+                TrackControls(track: playlist.track, crossfade: playlist.crossfade, crossfadeLabel: "Song crossfade")
+            }
+            Toggle("Use the clip's own audio", isOn: $model.audio.clipAudio.enabled)
+                .disabled(!(model.clip?.hasAudio ?? false))
+                .help("Off by default: a 30 s sound loop repeats audibly. A long bed usually sounds better.")
+            if model.audio.clipAudio.enabled, model.clip?.hasAudio == true {
+                TrackControls(track: $model.audio.clipAudio.track)
+            }
+            ForEach(model.audioNotes, id: \.self) { note in
+                Label(note, systemImage: "info.circle").font(.callout).foregroundStyle(.secondary)
+            }
+            if let error = model.audioError {
+                Label(error, systemImage: "xmark.octagon").foregroundStyle(.red)
+            }
+        } header: {
+            Text("Audio")
+        } footer: {
+            Text("Mixed to AAC 48 kHz stereo. Leave everything off for a silent video.")
+        }
+        .disabled(model.isExporting)
+    }
+}
+
+private struct BedRow: View {
+    @Environment(LooperModel.self) private var model
+    @State private var isChoosing = false
+
+    var body: some View {
+        LabeledContent("Ambient bed") {
+            HStack {
+                if let bed = model.bedItem {
+                    Text("\(bed.name) · \(Format.clock(bed.seconds))").lineLimit(1).truncationMode(.middle)
+                    Button("Remove", systemImage: "xmark.circle.fill") { model.removeBed() }
+                        .labelStyle(.iconOnly).buttonStyle(.borderless)
+                } else {
+                    Text("None").foregroundStyle(.secondary)
+                }
+                Button("Choose…") { isChoosing = true }
+            }
+        }
+        .fileImporter(isPresented: $isChoosing, allowedContentTypes: [.audio]) { result in
+            if case .success(let url) = result { Task { await model.chooseBed(url) } }
+        }
+    }
+}
+
+private struct PlaylistRow: View {
+    @Environment(LooperModel.self) private var model
+    @State private var isChoosing = false
+
+    var body: some View {
+        LabeledContent("Music playlist") {
+            HStack {
+                if let summary = model.playlistSummary, let folder = model.audio.playlist?.folder {
+                    Text("\(folder.lastPathComponent) · \(summary)").lineLimit(1).truncationMode(.middle)
+                    Button("Remove", systemImage: "xmark.circle.fill") { model.removePlaylist() }
+                        .labelStyle(.iconOnly).buttonStyle(.borderless)
+                } else {
+                    Text("None").foregroundStyle(.secondary)
+                }
+                Button("Choose Folder…") { isChoosing = true }
+            }
+        }
+        .fileImporter(isPresented: $isChoosing, allowedContentTypes: [.folder]) { result in
+            if case .success(let url) = result { Task { await model.choosePlaylist(url) } }
+        }
+        if !model.playlistItems.isEmpty {
+            DisclosureGroup("Songs, in play order") {
+                ForEach(Array(model.playlistItems.enumerated()), id: \.offset) { index, item in
+                    HStack {
+                        Text("\(index + 1). \(item.name)").lineLimit(1).truncationMode(.middle)
+                        Spacer()
+                        Text(Format.clock(item.seconds)).monospacedDigit().foregroundStyle(.secondary)
+                    }
+                    .font(.callout)
+                }
+            }
+        }
+    }
+}
+
+/// Volume, fades and (optionally) crossfade for one audio track.
+private struct TrackControls: View {
+    @Binding var track: AudioTrackSettings
+    var crossfade: Binding<Double>? = nil
+    var crossfadeLabel = "Crossfade"
+
+    var body: some View {
+        LabeledContent("Volume") {
+            HStack {
+                Slider(value: $track.volume, in: 0...1)
+                Text(Format.percent(Double(track.volume))).monospacedDigit().frame(width: 44, alignment: .trailing)
+            }
+        }
+        .padding(.leading, 16)
+        LabeledContent("Fade in / out") {
+            HStack(spacing: 6) {
+                SecondsField(value: $track.fadeIn)
+                Text("/").foregroundStyle(.secondary)
+                SecondsField(value: $track.fadeOut)
+            }
+        }
+        .padding(.leading, 16)
+        if let crossfade {
+            LabeledContent(crossfadeLabel) { SecondsField(value: crossfade) }
+                .padding(.leading, 16)
+        }
+    }
+}
+
+private struct SecondsField: View {
+    @Binding var value: Double
+
+    var body: some View {
+        HStack(spacing: 2) {
+            TextField("Seconds", value: Binding(get: { value }, set: { value = max(0, $0) }),
+                      format: .number.precision(.fractionLength(0...1)))
+                .labelsHidden()
+                .multilineTextAlignment(.trailing)
+                .frame(width: 48)
+            Text("s").foregroundStyle(.secondary)
+        }
     }
 }
 
