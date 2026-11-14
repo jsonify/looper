@@ -40,15 +40,14 @@ enum FFmpeg {
                                    "-vf", "crop=\(width):\(height):0:0,format=gray",
                                    "-f", "rawvideo", "-"])
         let frameSize = width * height
-        return raw.withUnsafeBytes { bytes in
-            stride(from: 0, to: raw.count - frameSize + 1, by: frameSize).map { start in
-                var value = 0
-                for bit in 0..<FrameID.bitCount {
-                    let offset = start + (bitBlock / 2) * width + bit * bitBlock + bitBlock / 2
-                    if bytes[offset] > 128 { value |= 1 << bit }
-                }
-                return value
+        let bytes = [UInt8](raw)
+        return stride(from: 0, to: bytes.count - frameSize + 1, by: frameSize).map { start -> Int in
+            var value = 0
+            for bit in 0..<FrameID.bitCount {
+                let offset = start + (bitBlock / 2) * width + bit * bitBlock + bitBlock / 2
+                if bytes[offset] > 128 { value |= 1 << bit }
             }
+            return value
         }
     }
 
