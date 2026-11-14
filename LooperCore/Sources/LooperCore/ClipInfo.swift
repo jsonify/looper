@@ -53,7 +53,7 @@ public struct ClipInfo: @unchecked Sendable {
 
     /// Asset options used everywhere a clip is opened: precise timing makes AVFoundation
     /// read exact sample times instead of estimating them.
-    static let assetOptions: [String: Any] = [AVURLAssetPreferPreciseDurationAndTimingKey: true]
+    static var assetOptions: [String: Any] { [AVURLAssetPreferPreciseDurationAndTimingKey: true] }
 
     /// Opens the clip and checks it has a single, non-empty, playable video track.
     public static func load(from url: URL) async throws -> ClipInfo {

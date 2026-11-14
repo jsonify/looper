@@ -17,7 +17,7 @@ struct DriftTests {
 
         #expect(loop.insertTimes.count == plan.copyCount)
         for (index, time) in loop.insertTimes.enumerated() {
-            #expect(time == clip.duration * Int32(index), "copy \(index) starts at \(time.seconds)")
+            #expect(time == clip.duration.multiplied(by: index), "copy \(index) starts at \(time.seconds)")
         }
 
         // Segments are contiguous: each starts exactly where the previous one ended.

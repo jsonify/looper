@@ -9,7 +9,7 @@ struct ClipInfoTests {
         let clip = try await ClipInfo.load(from: fixture.url)
         #expect(clip.frameCount == fixture.frameCount)
         #expect(clip.frameDuration == CMTime(value: fixture.frameDurationValue, timescale: fixture.frameDurationTimescale))
-        #expect(clip.duration == clip.frameDuration * Int32(fixture.frameCount))
+        #expect(clip.duration == clip.frameDuration.multiplied(by: fixture.frameCount))
         #expect(Int(clip.naturalSize.width) == fixture.width)
         #expect(Int(clip.naturalSize.height) == fixture.height)
         #expect(clip.codec == "avc1")

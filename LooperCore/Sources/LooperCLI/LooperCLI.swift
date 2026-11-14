@@ -45,7 +45,8 @@ struct LooperCLI {
 
             let size = (try? FileManager.default.attributesOfItem(atPath: outputURL.path)[.size] as? Int64) ?? 0
             log("done in \(elapsed.formatted(.units(allowed: [.minutes, .seconds], width: .narrow)))")
-            if let (remaining, at) = firstEstimate.value {
+            if let estimate = firstEstimate.value {
+                let (remaining, at) = estimate
                 let predictedTotal = at.seconds + remaining
                 log("first time-remaining estimate (at \(format(at.seconds))): total \(format(predictedTotal))")
             }

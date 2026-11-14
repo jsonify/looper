@@ -96,7 +96,7 @@ public struct LoopPlan: Equatable, @unchecked Sendable {
 
     /// Start time of every copy in the output, in order.
     public var insertTimes: [CMTime] {
-        (0..<copyCount).map { clipDuration * Int32($0) }
+        (0..<copyCount).map { clipDuration.multiplied(by: $0) }
     }
 
     public init(clip: ClipInfo, target: TargetDuration) {
@@ -120,8 +120,15 @@ public struct LoopPlan: Equatable, @unchecked Sendable {
         remainderFrames = totalFrames % clipFrameCount
         // Keep the remainder in the clip's timescale where possible, so the composition
         // works in one timescale throughout.
-        let rawRemainder = frameDuration * Int32(remainderFrames)
-        remainder = rawRemainder.convertScale(clipDuration.timescale, method: .default)
-        duration = clipDuration * Int32(fullCopies) + remainder
+        let rawRemainder = frameDuration.multiplied(by: remainderFrames)
+        remainder = CMTimeConvertScale(rawRemainder, timescale: clipDuration.timescale, method: .roundHalfAwayFromZero)
+        duration = clipDuration.multiplied(by: fullCopies) + remainder
+    }
+}
+
+extension CMTime {
+    /// Exact multiplication (CoreMedia has no `*` operator for CMTime and an integer).
+    func multiplied(by count: Int) -> CMTime {
+        CMTimeMultiply(self, multiplier: Int32(count))
     }
 }

@@ -29,8 +29,8 @@ struct LongExportTests {
 
         // Seams after the first copy, in the middle and the last one.
         for copy in [1, 480, 959] {
-            let seam = plan.clipDuration * Int32(copy)
-            let window = CMTimeRange(start: seam - plan.frameDuration * 5, duration: plan.frameDuration * 10)
+            let seam = plan.clipDuration.multiplied(by: copy)
+            let window = CMTimeRange(start: seam - plan.frameDuration.multiplied(by: 5), duration: plan.frameDuration.multiplied(by: 10))
             let ids = try await MediaInspection.frameIDs(of: asset, bitBlock: fixture.bitBlock, timeRange: window)
             #expect(ids.contains(0) && ids.contains(899), "seam \(copy): \(ids)")
             #expect(isContinuousLoop(ids, frameCount: fixture.frameCount), "seam \(copy): \(ids)")

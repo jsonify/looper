@@ -85,13 +85,13 @@ struct LoopPlanTests {
     @Test func ntscRateRoundsDownToTheLastWholeFrame() {
         // 900 frames at 30000/1001 fps = 30.03 s.
         let frame = CMTime(value: 1001, timescale: 30000)
-        let plan = LoopPlan(clipDuration: frame * 900, frameDuration: frame,
+        let plan = LoopPlan(clipDuration: frame.multiplied(by: 900), frameDuration: frame,
                             clipFrameCount: 900, target: .oneHour)
         // 3600 × 30000 / 1001 = 107892.1 → 107892 frames.
         #expect(plan.frameCount == 107_892)
         #expect(plan.fullCopies == 119)
         #expect(plan.remainderFrames == 792)
-        #expect(plan.duration == frame * 107_892)
+        #expect(plan.duration == frame.multiplied(by: 107_892))
         #expect(plan.duration <= CMTime(value: 3600, timescale: 1))
         #expect(CMTime(value: 3600, timescale: 1) - plan.duration < frame)
     }
