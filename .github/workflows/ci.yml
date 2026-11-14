@@ -21,7 +21,7 @@ jobs:
   core-tests:
     name: LooperCore tests
     runs-on: macos-15
-    timeout-minutes: 45
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
