@@ -49,36 +49,36 @@ public struct LoopWriter: Sendable {
         // doesn't need it.
         writer.shouldOptimizeForNetworkUse = false
 
+        // Raw sample timestamps can start after zero: B-frame clips store the first
+        // shown frame a frame or two into the media timeline and use an edit to hide
+        // the gap. Find that start and keep the same structure in the output (session
+        // from mediaStart), so decode timestamps never go negative.
+        let mediaStart = try Self.readSamples(of: track, in: asset)
+            .map(CMSampleBufferGetPresentationTimeStamp)
+            .reduce(CMTime.positiveInfinity) { $1 < $0 ? $1 : $0 }
+        guard mediaStart.isNumeric else { throw ClipError.emptyVideoTrack }
+
         guard writer.startWriting() else {
             throw ExportError.failed(writer.error?.localizedDescription ?? "couldn't start writing")
         }
-        writer.startSession(atSourceTime: .zero)
+        writer.startSession(atSourceTime: mediaStart)
 
-        var reporter = ProgressReporter(total: plan.duration, interval: progressInterval, report: progress)
+        let pump = SamplePump(
+            input: input, track: track, asset: asset, plan: plan, mediaStart: mediaStart,
+            reporter: ProgressReporter(total: plan.duration, interval: progressInterval, report: progress))
         do {
-            for (index, start) in plan.insertTimes.enumerated() {
-                // Reader timestamps are in track time; shift so this copy starts at `start`.
-                let offset = start - clip.videoTimeRange.start
-                let isTrimmedCopy = index == plan.fullCopies
-                let samples = try readSamples(of: track, in: asset)
-                let selected = isTrimmedCopy
-                    ? Self.samplesNeeded(samples, toShowFramesBefore: clip.videoTimeRange.start + plan.remainder)
-                    : samples
-                for sample in selected {
-                    try await append(try Self.retimed(sample, by: offset), to: input, writer: writer)
-                    reporter.update(position: CMSampleBufferGetPresentationTimeStamp(sample) + offset)
-                }
-            }
+            try await pump.run()
         } catch {
+            let detail = writer.status == .failed ? writer.error : nil
             writer.cancelWriting()
             try? FileManager.default.removeItem(at: partialURL)
+            if let detail, !(error is CancellationError) { throw ExportError.failed(detail.localizedDescription) }
             throw error
         }
 
-        input.markAsFinished()
         // Ending the session at the exact target trims any decode-only samples of the
         // last copy (frames past the cut that earlier B-frames reference) via the edit list.
-        writer.endSession(atSourceTime: plan.duration)
+        writer.endSession(atSourceTime: mediaStart + plan.duration)
         await writer.finishWriting()
 
         guard writer.status == .completed else {
@@ -89,10 +89,10 @@ public struct LoopWriter: Sendable {
         progress(ExportProgress(fractionCompleted: 1, estimatedTimeRemaining: 0))
     }
 
-    /// All compressed samples of one copy of the clip, in decode order. One reader per
-    /// copy keeps memory flat (only one copy is held at a time) at the cost of
-    /// reopening a small file, which the OS has cached.
-    private func readSamples(of track: AVAssetTrack, in asset: AVAsset) throws -> [CMSampleBuffer] {
+    /// All compressed samples of one copy of the clip, in decode order, with their raw
+    /// media timestamps. One reader per copy keeps memory flat (only one copy is held
+    /// at a time) at the cost of reopening a small file, which the OS has cached.
+    static func readSamples(of track: AVAssetTrack, in asset: AVAsset) throws -> [CMSampleBuffer] {
         let reader = try AVAssetReader(asset: asset)
         let output = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
         output.alwaysCopiesSampleData = false
@@ -141,18 +141,101 @@ public struct LoopWriter: Sendable {
         return copy
     }
 
-    /// Appends when the input is ready. Polling with a short sleep keeps this a simple
-    /// async loop; the writer buffers several samples, so the waits are rare and short.
-    private func append(_ sample: CMSampleBuffer, to input: AVAssetWriterInput, writer: AVAssetWriter) async throws {
-        while !input.isReadyForMoreMediaData {
-            try Task.checkCancellation()
-            guard writer.status == .writing else { break }
-            try await Task.sleep(for: .milliseconds(2))
+}
+
+/// Feeds retimed samples to the writer input from AVFoundation's pull callback
+/// (`requestMediaDataWhenReady`), the fastest way to keep the writer busy.
+///
+/// @unchecked Sendable: all mutable state is touched only on `queue` (the callback
+/// queue), except the cancellation flag, which is lock-protected.
+private final class SamplePump: @unchecked Sendable {
+    private let input: AVAssetWriterInput
+    private let track: AVAssetTrack
+    private let asset: AVAsset
+    private let plan: LoopPlan
+    private let mediaStart: CMTime
+    private var reporter: ProgressReporter
+    private let queue = DispatchQueue(label: "looper.loopwriter.video")
+
+    private var copyIndex = 0
+    private var pending: [CMSampleBuffer] = []
+    private var pendingIndex = 0
+    private var offset = CMTime.zero
+    private var continuation: CheckedContinuation<Void, Error>?
+
+    private let lock = NSLock()
+    private var cancelled = false
+
+    init(input: AVAssetWriterInput, track: AVAssetTrack, asset: AVAsset, plan: LoopPlan,
+         mediaStart: CMTime, reporter: ProgressReporter) {
+        self.input = input
+        self.track = track
+        self.asset = asset
+        self.plan = plan
+        self.mediaStart = mediaStart
+        self.reporter = reporter
+    }
+
+    func run() async throws {
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                queue.sync { self.continuation = continuation }
+                input.requestMediaDataWhenReady(on: queue) { [self] in pump() }
+            }
+        } onCancel: {
+            lock.lock(); cancelled = true; lock.unlock()
         }
-        try Task.checkCancellation()
-        guard writer.status == .writing, input.append(sample) else {
-            throw ExportError.failed(writer.error?.localizedDescription ?? "couldn't append a sample")
+    }
+
+    private enum Step { case appended, done, failed(Error) }
+
+    private func pump() {
+        guard continuation != nil else { return }
+        while input.isReadyForMoreMediaData {
+            let isCancelled = lock.withLock { cancelled }
+            if isCancelled { return finish(.failure(CancellationError())) }
+            // Drain autoreleased AVFoundation objects per sample; otherwise they pile up
+            // over hundreds of thousands of samples on this long-lived callback.
+            let step: Step = autoreleasepool {
+                do {
+                    guard let sample = try nextSample() else { return .done }
+                    return input.append(sample) ? .appended : .failed(ExportError.failed("couldn't append a sample"))
+                } catch {
+                    return .failed(error)
+                }
+            }
+            switch step {
+            case .appended: continue
+            case .done: return finish(.success(()))
+            case .failed(let error): return finish(.failure(error))
+            }
         }
+    }
+
+    private func finish(_ result: Result<Void, Error>) {
+        input.markAsFinished()
+        continuation?.resume(with: result)
+        continuation = nil
+    }
+
+    /// The next sample in output order, retimed, loading the next copy when needed.
+    private func nextSample() throws -> CMSampleBuffer? {
+        while pendingIndex >= pending.count {
+            guard copyIndex < plan.copyCount else { return nil }
+            let samples = try LoopWriter.readSamples(of: track, in: asset)
+            // Raw media times + offset: copy k occupies [k × D, (k+1) × D) after the
+            // session start (mediaStart), so seams are exact.
+            offset = plan.clipDuration.multiplied(by: copyIndex)
+            pending = copyIndex == plan.fullCopies
+                ? LoopWriter.samplesNeeded(samples, toShowFramesBefore: mediaStart + plan.remainder)
+                : samples
+            pendingIndex = 0
+            copyIndex += 1
+        }
+        let sample = pending[pendingIndex]
+        pendingIndex += 1
+        reporter.update(position: CMSampleBufferGetPresentationTimeStamp(sample) + offset - mediaStart)
+        return try LoopWriter.retimed(sample, by: offset)
     }
 }
 
