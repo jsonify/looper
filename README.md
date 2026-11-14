@@ -21,6 +21,18 @@ macOS 14 or later, Intel or Apple Silicon. Building needs Xcode 16.
 | `scripts/make-test-clip.sh` | Generates the test clips and audio (needs ffmpeg). |
 | `.github/workflows/ci.yml` | macOS CI: core tests and a universal Release build of the app. |
 
+## Installing on another Mac
+
+```bash
+make package
+```
+
+This builds a universal app (Intel and Apple Silicon), signs it ad hoc and zips it into `dist/`. Each CI run also uploads the zip as the `Looper-app` artifact. On the other Mac, unzip it, move `Looper.app` to Applications, and clear the download quarantine once:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Looper.app
+```
+
 ## Development
 
 ```bash
