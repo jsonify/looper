@@ -1,0 +1,83 @@
+{
+  "id": "quiet-keys",
+  "name": "Quiet Keys",
+  "brand": {
+    "layout": "minimalLogo",
+    "textColor": "#F5F1EA",
+    "accentColor": "#B9A7D6",
+    "font": "Didot"
+  },
+  "noAds": true,
+  "titles": {
+    "shared": [
+      "Soft Piano & {scene} | {duration} of Calm Music",
+      "{duration} of Gentle Piano with {scene} Ambience",
+      "Quiet Piano for {mode} | {scene}, {duration}",
+      "{scene} with Soft Piano | Relaxing Music, {duration}"
+    ],
+    "byMode": {
+      "Sleep": [
+        "Soft Piano for Sleep | {scene} Ambience, {duration}",
+        "{duration} of Sleep Piano with {scene} | Fall Asleep Fast",
+        "Calm Piano & {scene} to Fall Asleep | {duration}",
+        "Quiet Piano for Sleep | {scene}, {duration}"
+      ],
+      "Focus": [
+        "Piano for Focus & Study | {scene} Ambience, {duration}",
+        "{duration} of Gentle Piano for Deep Work | {scene}",
+        "Calm Piano & {scene} for Concentration | {duration}",
+        "Quiet Piano for Focus | {scene}, {duration}"
+      ]
+    }
+  },
+  "hooks": {
+    "shared": [
+      "Slow, gentle piano with soft ambience underneath, for {duration} without interruption.",
+      "Let soft piano and quiet ambience slow everything down.",
+      "Simple melodies, plenty of space, nothing sudden.",
+      "Tonight's setting: {scene}, with quiet piano."
+    ],
+    "byMode": {
+      "Sleep": [
+        "Close your eyes, breathe out and let the piano carry you to sleep.",
+        "Slow, gentle piano with soft ambience underneath, for {duration} without interruption.",
+        "Simple melodies, plenty of space, nothing sudden.",
+        "Tonight's setting: {scene}, with quiet piano."
+      ]
+    }
+  },
+  "hear": [
+    "{music} over {elements}.",
+    "You'll hear {music} with {elements} in the background."
+  ],
+  "perfectFor": {
+    "shared": [
+      "Perfect for rest, reading and quiet evenings."
+    ],
+    "byMode": {
+      "Sleep": [
+        "Perfect for falling asleep, winding down or a peaceful night.",
+        "Perfect for bedtime, meditation and calming anxiety.",
+        "Perfect for sleep, rest and quiet evenings."
+      ],
+      "Focus": [
+        "Perfect for studying, reading, writing and deep work.",
+        "Perfect for focus, concentration and calm productivity.",
+        "Perfect for working from home, journaling or a quiet afternoon."
+      ]
+    }
+  },
+  "modeTags": {
+    "byMode": {
+      "Sleep": ["sleep piano", "piano for sleeping", "relaxing sleep music", "calm piano music", "fall asleep fast"],
+      "Focus": ["piano for studying", "focus music", "study piano", "concentration music", "deep work music"]
+    }
+  },
+  "footer": "🎹 Quiet Keys pairs soft piano with gentle ambience for sleep, rest and focus. Subscribe for more quiet hours.\n\nMusic, ambience and visuals were created with the help of AI tools.",
+  "hashtags": ["#softpiano", "#relaxingmusic", "#sleepmusic"],
+  "coreTags": ["soft piano", "relaxing piano", "calm piano", "peaceful piano music", "piano ambience", "instrumental music", "ambient piano"],
+  "versions": [
+    { "name": "3h Sleep", "mode": "Sleep", "duration": "3h", "videoFade": { "enabled": true, "seconds": 30 } },
+    { "name": "1h Focus", "mode": "Focus", "duration": "1h" }
+  ]
+}

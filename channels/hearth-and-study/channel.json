@@ -1,0 +1,60 @@
+{
+  "id": "hearth-and-study",
+  "name": "Hearth & Study",
+  "brand": {
+    "layout": "centeredBand",
+    "textColor": "#FFF4E6",
+    "accentColor": "#C8783C",
+    "font": "Georgia Bold"
+  },
+  "noAds": true,
+  "titles": {
+    "shared": [
+      "{scene} Ambience | {duration} for Study & Focus",
+      "{mood} {scene} | {duration} of Ambience to Study, Read & Work",
+      "{scene} | {duration} of {mood} Ambience for Deep Focus",
+      "{duration} Study Session: {scene} Ambience",
+      "{scene} Sounds for Studying | {duration} of Calm Concentration",
+      "{scene} Ambience to Read, Write & Study | {duration}",
+      "{duration} of {scene} | Background Ambience for Productive Work"
+    ]
+  },
+  "hooks": {
+    "shared": [
+      "Pull up a chair, pour something warm and settle into a long, focused session.",
+      "{duration} of gentle background sound to help you get into the zone.",
+      "A cozy corner to study, read or work, with nothing to distract you.",
+      "Today's study spot: {scene}.",
+      "Soft, steady ambience that stays in the background while you focus."
+    ]
+  },
+  "hear": [
+    "In this video: {elements}.",
+    "You'll hear {elements}.",
+    "Listen for {elements} while you work."
+  ],
+  "perfectFor": {
+    "shared": [
+      "Perfect for studying, reading, writing and deep work."
+    ],
+    "byMode": {
+      "Study": [
+        "Perfect for studying, reading, writing and deep work.",
+        "Perfect for homework, exam prep or a long work session.",
+        "Perfect for focus, journaling, coding or a quiet afternoon with a book."
+      ]
+    }
+  },
+  "modeTags": {
+    "byMode": {
+      "Study": ["study ambience", "ambience for studying", "focus sounds", "background noise for studying", "deep focus", "reading ambience"]
+    }
+  },
+  "footer": "☕ Hearth & Study creates cozy places to study, read and work. Subscribe and make one your regular spot.\n\nAmbience and visuals were created with the help of AI tools.",
+  "hashtags": ["#studyambience", "#cozyambience", "#focus"],
+  "coreTags": ["cozy ambience", "coffee shop ambience", "cabin ambience", "fireplace sounds", "library ambience", "ambient sounds"],
+  "versions": [
+    { "name": "3h Study", "mode": "Study", "duration": "3h" },
+    { "name": "1h Study", "mode": "Study", "duration": "1h" }
+  ]
+}

@@ -11,15 +11,22 @@ public struct Job: Codable, Equatable, Identifiable, Sendable {
     /// Time in the clip of the frame used for every version's thumbnail, seconds from
     /// the clip's start (picked by scrubbing, #46).
     public var thumbnailTime: Double
+    /// The `Channel.id` whose branding the publish kit uses; nil for no channel.
+    public var channelID: String?
+    /// Scene, mood and elements for the channel templates.
+    public var scene: SceneDetails
 
-    public init(id: UUID = UUID(), clip: URL, versions: [Version] = [], thumbnailTime: Double = 0) {
+    public init(id: UUID = UUID(), clip: URL, versions: [Version] = [], thumbnailTime: Double = 0,
+                channelID: String? = nil, scene: SceneDetails? = nil) {
         self.id = id
         self.clip = clip
         self.versions = versions
         self.thumbnailTime = thumbnailTime
+        self.channelID = channelID
+        self.scene = scene ?? SceneDetails(suggestedFor: clip)
     }
 
-    private enum CodingKeys: String, CodingKey { case id, clip, versions, thumbnailTime }
+    private enum CodingKeys: String, CodingKey { case id, clip, versions, thumbnailTime, channelID, scene }
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -27,6 +34,8 @@ public struct Job: Codable, Equatable, Identifiable, Sendable {
         clip = try c.decode(URL.self, forKey: .clip)
         versions = try c.decodeIfPresent([Version].self, forKey: .versions) ?? []
         thumbnailTime = try c.decodeIfPresent(Double.self, forKey: .thumbnailTime) ?? 0
+        channelID = try c.decodeIfPresent(String.self, forKey: .channelID)
+        scene = try c.decodeIfPresent(SceneDetails.self, forKey: .scene) ?? SceneDetails(suggestedFor: clip)
     }
 
     /// The folder holding all of this job's versions.
