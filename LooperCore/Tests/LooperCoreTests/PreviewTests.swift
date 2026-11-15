@@ -100,7 +100,7 @@ struct LoopPreviewTests {
         let video = try await preview.composition.loadTracks(withMediaType: .video)
         let audioTracks = try await preview.composition.loadTracks(withMediaType: .audio)
         #expect(video.count == 1)
-        #expect(audioTracks.count == 4) // bed and playlist, two alternating tracks each
+        #expect(audioTracks.count == 3) // the rendered bed on one track, the playlist on two alternating
         let videoRange = try await video[0].load(.timeRange)
         #expect(videoRange.duration == plan.duration)
 

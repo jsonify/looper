@@ -26,6 +26,18 @@ struct AudioTrackMix: Sendable {
     let placements: [AudioPlacement]
     /// Names of the items `placements` index into (song file names for the playlist).
     let itemNames: [String]
+    /// What the volume ramps follow. Usually `placements`; a rendered bed (`BedLoop`)
+    /// shows its wraps in `placements` but has them baked in, so it is one piece here.
+    let gainPlacements: [AudioPlacement]
+
+    init(trackID: CMPersistentTrackID, role: AudioRole, placements: [AudioPlacement], itemNames: [String],
+         gainPlacements: [AudioPlacement]? = nil) {
+        self.trackID = trackID
+        self.role = role
+        self.placements = placements
+        self.itemNames = itemNames
+        self.gainPlacements = gainPlacements ?? placements
+    }
 }
 
 extension LoopAudioSettings {
@@ -79,9 +91,35 @@ enum LoopAudioBuilder {
             }
         }
 
+        /// A short bed repeats many times: render it once with the wrap crossfade baked
+        /// in and repeat that on one track, so the mix needs no ramps per wrap.
+        func addRenderedBed(_ item: AudioItem, crossfade: Double) async throws {
+            let overlap = BedLoop.overlap(itemSeconds: item.seconds, crossfade: crossfade)
+            let loop = try await BedLoop.render(item: item, overlapSeconds: overlap)
+            let source = try await sourceTrack(for: loop.url)
+            sourceAssets.append(source.asset)
+            let track = try addTrack(to: composition)
+            for segment in loop.segments(totalFrames: time(total).value) {
+                try track.insertTimeRange(
+                    CMTimeRange(start: source.start + CMTime(value: segment.from, timescale: timescale),
+                                duration: CMTime(value: segment.length, timescale: timescale)),
+                    of: source.track, at: CMTime(value: segment.at, timescale: timescale))
+            }
+            tracks.append(track)
+            // The timeline still shows each wrap where the chain would put it.
+            let shown = AudioChain.placements(itemDurations: [item.seconds], crossfade: crossfade, fill: total)
+            let whole = AudioPlacement(itemIndex: 0, start: 0, length: total, track: 0, fadeIn: 0, fadeOut: 0)
+            mixes.append(AudioTrackMix(trackID: track.trackID, role: .bed, placements: shown,
+                                       itemNames: [item.name], gainPlacements: [whole]))
+        }
+
         if let bed = settings.bed {
             let item = try await AudioItem.load(from: bed.file).trimmed(bed.trim)
-            try await addChain(items: [item], crossfade: bed.wrapCrossfade, role: .bed)
+            if item.seconds <= BedLoop.maxRenderedSeconds, item.seconds < total {
+                try await addRenderedBed(item, crossfade: bed.wrapCrossfade)
+            } else {
+                try await addChain(items: [item], crossfade: bed.wrapCrossfade, role: .bed)
+            }
         }
         if let playlist = settings.playlist {
             let items = try await FolderAudioSource(folder: playlist.folder).items()
@@ -121,7 +159,7 @@ enum LoopAudioBuilder {
         let mix = AVMutableAudioMix()
         mix.inputParameters = mixes.map { track in
             let silent = AudioTrackSettings(volume: 0, fadeIn: 0, fadeOut: 0)
-            return mixParameters(for: track.trackID, placements: track.placements,
+            return mixParameters(for: track.trackID, placements: track.gainPlacements,
                                  settings: settings(track.role) ?? silent, total: total)
         }
         return mix

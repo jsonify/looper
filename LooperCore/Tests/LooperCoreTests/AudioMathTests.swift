@@ -162,3 +162,34 @@ struct AudioSourceTests {
         }
     }
 }
+
+/// A rendered bed repeats so each crossfade lands where the chain puts it.
+@Suite("BedLoop")
+struct BedLoopTests {
+    @Test func segmentsMatchTheChain() {
+        // 10 s bed, 2 s overlap, 30 s: the chain's crossfades are at 8–10, 16–18, 24–26 s.
+        let loop = BedLoop(url: URL(fileURLWithPath: "/dev/null"), frames: 480_000, overlapFrames: 96_000)
+        let s = loop.segments(totalFrames: 30 * 48_000)
+        #expect(s.map(\.from) == [0, 96_000, 96_000, 96_000])
+        #expect(s.map(\.at) == [0, 480_000, 864_000, 1_248_000])        // 0, 10, 18, 26 s
+        #expect(s.map(\.length) == [480_000, 384_000, 384_000, 192_000]) // last trimmed to end at 30 s
+        // Each repeat's blend (the file's last 2 s) ends where a chain crossfade ends.
+        let blendEnds = s.dropLast().map { Double($0.at + $0.length) / 48_000 }
+        #expect(blendEnds == [10, 18, 26])
+        let chain = AudioChain.placements(itemDurations: [10], crossfade: 2, fill: 30)
+        #expect(chain.dropFirst().map { $0.start + $0.fadeIn } == [10, 18, 26])
+    }
+
+    @Test func noOverlapRepeatsTheWholeFile() {
+        let loop = BedLoop(url: URL(fileURLWithPath: "/dev/null"), frames: 480_000, overlapFrames: 0)
+        let s = loop.segments(totalFrames: 25 * 48_000)
+        #expect(s.map(\.from) == [0, 0, 0])
+        #expect(s.map(\.length) == [480_000, 480_000, 240_000])
+    }
+
+    @Test func shortFadesAreOneRamp() {
+        let piece = AudioPlacement(itemIndex: 0, start: 0, length: 30, track: 0, fadeIn: 0.01, fadeOut: 0.01)
+        let points = GainEnvelope.points(for: [piece], volume: 1, fadeIn: 0, fadeOut: 0, total: 30)
+        #expect(points.map(\.time) == [0, 0.01, 29.99, 30])
+    }
+}
