@@ -16,3 +16,6 @@ build/
 /dist/
 
 .DS_Store
+
+# Channel upload history (written by the app and `--record-history`)
+channels/*/history.json

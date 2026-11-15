@@ -88,12 +88,17 @@ public struct VideoFade: Codable, Equatable, Sendable {
     }
 }
 
-/// Templates for the publish kit written next to each video: `metadata.txt` (title,
-/// description, tags) and `thumbnail.jpg`. Placeholders such as `{hours}`, `{scene}` and
-/// `{mode}` are filled in when the kit is written (#45).
+/// Per-version overrides for the channel's publish kit (`KitFactory`). Empty fields use
+/// the channel's pools. Placeholders such as `{scene}` and `{duration}` work as in the
+/// channel's templates.
 public struct PublishTemplates: Codable, Equatable, Sendable {
+    /// Used as the title pattern instead of one from the channel's pool; " (No-Ads)" is
+    /// still added when the label is on.
     public var title: String
+    /// Used as the description's opening (hook) line instead of one from the pool; the
+    /// rest of the description still comes from the channel.
     public var description: String
+    /// Extra tags, ranked with the scene tags (highest priority).
     public var tags: [String]
     public var thumbnail: ThumbnailStyle
 

@@ -41,8 +41,12 @@ public struct JobResult: Sendable, Equatable {
 /// and the next one still runs (one bad playlist shouldn't cost the other uploads);
 /// cancelling stops the current version and skips the rest.
 ///
-/// Video fade to black (#44) and the publish kit (#45, #46) are stored on `Version`
-/// but not yet written here.
+/// With `branding`, each finished version also gets its publish kit's text files
+/// (`title.txt`, `description.txt`, `tags.txt`) and its choices go into the channel's
+/// history. Every kit is made before the first export starts, so a template that can't
+/// be filled stops the job at once instead of after hours of exporting.
+///
+/// Video fade to black (#44) and the thumbnail (#46, #72) are not yet written here.
 public struct JobRunner: Sendable {
     public var exporter: any LoopExporting
     public var loadClip: @Sendable (URL) async throws -> ClipInfo
@@ -64,9 +68,11 @@ public struct JobRunner: Sendable {
         _ job: Job,
         outputFolder: URL,
         replacing: Bool = false,
+        branding: Branding? = nil,
         progress: @escaping @Sendable (JobProgress) -> Void = { _ in }
     ) async throws -> JobResult {
         if let problem = job.problem { throw problem }
+        let kits = try branding?.kits(for: job)
         try Task.checkCancellation()
         let clip = try await loadClip(job.clip)
 
@@ -91,6 +97,15 @@ public struct JobRunner: Sendable {
                     progress(tracker.report(index: index, count: count, version: update))
                 }
                 tracker.complete(index: index)
+                if let branding, let kit = kits?[index] {
+                    do {
+                        try kit.write(to: url.deletingLastPathComponent())
+                        try branding.record(kit)
+                    } catch {
+                        outcomes.append(.failed("The video was written, but not its publish kit: \(error.localizedDescription)"))
+                        continue
+                    }
+                }
                 outcomes.append(.finished(url))
             } catch {
                 // An exporter may surface a cancel as some other error; the task's state decides.

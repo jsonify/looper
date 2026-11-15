@@ -8,6 +8,7 @@
     "font": "Didot"
   },
   "noAds": true,
+  "music": "soft piano",
   "titles": {
     "shared": [
       "Soft Piano & {scene} | {duration} of Calm Music",
