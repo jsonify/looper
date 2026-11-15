@@ -18,8 +18,21 @@ macOS 14 or later, Intel or Apple Silicon. Building needs Xcode 16.
 |---|---|
 | `LooperCore/` | Swift package with the processing engine. AVFoundation only, no UI code. |
 | `Looper/`, `Looper.xcodeproj` | The SwiftUI app. Uses `LooperCore` as a local package. New files in `Looper/` are picked up automatically. |
+| `channels/` | Starter channel brand kits (`channel.json` per channel). See [Channels](#channels). |
 | `scripts/make-test-clip.sh` | Generates the test clips and audio (needs ffmpeg). |
 | `.github/workflows/ci.yml` | macOS CI: core tests and a universal Release build of the app. |
+
+## Channels
+
+Each YouTube channel has a brand kit that the publish kit is written from: title patterns, description lines, tags, hashtags, thumbnail layout, colours and font, plus the versions a new job on that channel starts with. Every channel lives in its own folder:
+
+```
+<Channels folder>/
+  rainfall-hours/  channel.json  logo.png (optional)
+  quiet-keys/      channel.json
+```
+
+Copy the starters from `channels/` (Rainfall Hours, Hearth & Study, Quiet Keys) into your channels folder and edit the JSON. Text pools may use `{scene}`, `{mood}`, `{elements}`, `{hours}`, `{duration}`, `{mode}`, `{channel}` and `{music}`; anything else in braces is reported when the channel loads, along with bad colours, missing pools and tag mistakes. A pool is either a list or `{"shared": [...], "byMode": {"Sleep": [...]}}`. Durations can be written as `"3h"` or `"1:30:00"`. `noAds` (on by default) adds "(No-Ads)" to titles and descriptions; a version can turn it off. The factory that writes titles, descriptions, tags and thumbnails from these is in progress (#71, #72, #73).
 
 ## Installing on another Mac
 

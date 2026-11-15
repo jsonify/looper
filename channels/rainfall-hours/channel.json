@@ -1,0 +1,61 @@
+{
+  "id": "rainfall-hours",
+  "name": "Rainfall Hours",
+  "brand": {
+    "layout": "cornerNumber",
+    "textColor": "#E8EEF5",
+    "accentColor": "#6F8FB3",
+    "font": "Avenir Next Condensed Bold"
+  },
+  "noAds": true,
+  "titles": {
+    "shared": [
+      "{scene} | {duration} of Rain Sounds for Sleep",
+      "{duration} of {scene} | Rain Sounds to Fall Asleep Fast",
+      "Fall Asleep to {scene} | {mood} Rain Ambience, {duration}",
+      "{scene} Rain Sounds for Deep Sleep | {duration}",
+      "{duration} {scene} Ambience | Rain for Sleep, Relaxation & Insomnia",
+      "{mood} {scene} | {duration} of Rain to Quiet Your Mind",
+      "Sleep Instantly with {scene} | {duration} of Steady Rain"
+    ]
+  },
+  "hooks": {
+    "shared": [
+      "Let the steady sound of rain carry you off to sleep.",
+      "Settle in, switch off the lights and let the rain do the rest.",
+      "{duration} of uninterrupted rain for a deep, restful night.",
+      "No talking, no music, no interruptions. Just rain.",
+      "Breathe slowly and let the storm outside fade into the background.",
+      "Tonight's scene: {scene}."
+    ]
+  },
+  "hear": [
+    "In this video: {elements}.",
+    "You'll hear {elements}, all night long.",
+    "Listen for {elements}."
+  ],
+  "perfectFor": {
+    "shared": [
+      "Perfect for sleep, relaxation, reading or quiet focus."
+    ],
+    "byMode": {
+      "Sleep": [
+        "Perfect for falling asleep, napping or calming a racing mind.",
+        "Perfect for sleep, insomnia relief and quiet nights.",
+        "Perfect for bedtime, meditation or blocking out noisy neighbors."
+      ]
+    }
+  },
+  "modeTags": {
+    "byMode": {
+      "Sleep": ["rain sounds for sleeping", "sleep sounds", "rain for sleep", "fall asleep fast", "insomnia relief", "white noise rain"]
+    }
+  },
+  "footer": "🌧 Rainfall Hours makes long, uninterrupted rain soundscapes for sleep and relaxation. Subscribe for more rainy nights.\n\nSound and visuals were created with the help of AI tools.",
+  "hashtags": ["#rainsounds", "#sleepsounds", "#ambience"],
+  "coreTags": ["rain sounds", "rain ambience", "relaxing rain", "rainfall", "thunderstorm sounds", "nature sounds", "ambient sounds"],
+  "versions": [
+    { "name": "3h Sleep", "mode": "Sleep", "duration": "3h", "videoFade": { "enabled": true, "seconds": 30 } },
+    { "name": "1h Sleep", "mode": "Sleep", "duration": "1h", "videoFade": { "enabled": true, "seconds": 30 } }
+  ]
+}

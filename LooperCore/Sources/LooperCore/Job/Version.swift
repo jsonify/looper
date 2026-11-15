@@ -10,6 +10,12 @@ public struct Version: Codable, Equatable, Identifiable, Sendable {
     public var id: UUID
     /// Shown in the app and used as the output folder name: `<Clip name>/<name>/`.
     public var name: String
+    /// What the upload is for, e.g. "Sleep", "Study", "Focus": picks the channel's
+    /// per-mode text. Older files without it take it from the name ("8h Sleep" → "Sleep").
+    public var mode: String
+    /// False turns the channel's No-Ads label off for this version only, e.g. when its
+    /// ads stay on for revenue. Ignored when the channel doesn't use the label.
+    public var noAds: Bool
     public var duration: TargetDuration
     /// Bed, playlist and clip audio, each with its own volume and fades.
     public var audio: LoopAudioSettings
@@ -19,13 +25,18 @@ public struct Version: Codable, Equatable, Identifiable, Sendable {
     public init(
         id: UUID = UUID(),
         name: String? = nil,
+        mode: String? = nil,
+        noAds: Bool = true,
         duration: TargetDuration,
         audio: LoopAudioSettings = LoopAudioSettings(),
         videoFade: VideoFade = .off,
         publish: PublishTemplates = PublishTemplates()
     ) {
         self.id = id
-        self.name = name ?? OutputLayout.versionName(for: duration)
+        let name = name ?? OutputLayout.versionName(for: duration)
+        self.name = name
+        self.mode = mode ?? Self.mode(fromName: name)
+        self.noAds = noAds
         self.duration = duration
         self.audio = audio
         self.videoFade = videoFade
@@ -33,7 +44,7 @@ public struct Version: Codable, Equatable, Identifiable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, duration, audio, videoFade, publish
+        case id, name, mode, noAds, duration, audio, videoFade, publish
     }
 
     public init(from decoder: any Decoder) throws {
@@ -41,6 +52,8 @@ public struct Version: Codable, Equatable, Identifiable, Sendable {
         duration = try c.decode(TargetDuration.self, forKey: .duration)
         id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
         name = try c.decodeIfPresent(String.self, forKey: .name) ?? OutputLayout.versionName(for: duration)
+        mode = try c.decodeIfPresent(String.self, forKey: .mode) ?? Self.mode(fromName: name)
+        noAds = try c.decodeIfPresent(Bool.self, forKey: .noAds) ?? true
         audio = try c.decodeIfPresent(LoopAudioSettings.self, forKey: .audio) ?? LoopAudioSettings()
         videoFade = try c.decodeIfPresent(VideoFade.self, forKey: .videoFade) ?? .off
         publish = try c.decodeIfPresent(PublishTemplates.self, forKey: .publish) ?? PublishTemplates()
@@ -48,6 +61,16 @@ public struct Version: Codable, Equatable, Identifiable, Sendable {
 
     /// The folder this version is written to inside the clip's folder.
     public var folderName: String { OutputLayout.safeName(name) }
+
+    /// "8h Sleep" → "Sleep", "1h30m Deep Focus" → "Deep Focus", "3h" → "": the name
+    /// without a leading duration.
+    static func mode(fromName name: String) -> String {
+        var words = name.split(separator: " ").map(String.init)
+        if let first = words.first, first.lowercased().wholeMatch(of: /(\d+h)?(\d+m)?(\d+s)?/) != nil {
+            words.removeFirst()
+        }
+        return words.joined(separator: " ")
+    }
 }
 
 /// Fade the picture to black over the last `seconds` of the video. Stored now, rendered
@@ -122,13 +145,19 @@ public struct ThumbnailStyle: Codable, Equatable, Sendable {
 }
 
 /// Stored as whole seconds; decoding runs the same checks as `init(seconds:)`, so a
-/// file can't smuggle in a zero or over-12-hour duration.
+/// file can't smuggle in a zero or over-12-hour duration. Hand-written files (channels)
+/// may also use text such as "3h" or "1:30:00".
 extension TargetDuration: Codable {
     public init(from decoder: any Decoder) throws {
         let container = try decoder.singleValueContainer()
-        let seconds = try container.decode(Int.self)
         do {
-            try self.init(seconds: seconds)
+            if let text = try? container.decode(String.self) {
+                try self.init(parsing: text)
+            } else {
+                try self.init(seconds: try container.decode(Int.self))
+            }
+        } catch let error as DecodingError {
+            throw error
         } catch {
             throw DecodingError.dataCorruptedError(
                 in: container, debugDescription: error.localizedDescription)
