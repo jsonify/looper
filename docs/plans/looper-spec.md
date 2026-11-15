@@ -9,12 +9,12 @@ A personal macOS app that turns a short seamless video loop plus audio into fini
 ## Decisions
 
 - **Scope: Looper + publish kit, no uploading.** The app produces the video plus a thumbnail and metadata text per version. Uploading stays manual in YouTube Studio, because YouTube API work (OAuth, quota, resumable 10–100 GB uploads) is a project of its own and uploading by hand is quick.
-- **Build and test: CI plus the user's Mac.** The processing core is a Swift package. A GitHub Actions macOS workflow generates a frame-counter test clip with ffmpeg and runs the seam, duration and trim tests on every push. SwiftUI work and the full-size 8 h export run on the user's Mac, because the cloud session is Linux (no AVFoundation) and CI runners have limited disk and time.
-- **8 h testing is layered so it stays cheap:**
-  - Seam drift: build a 960-insert composition and check every insert time exactly, with no export (CI, milliseconds).
-  - Long-run memory and duration: export 8 h from a tiny low-bitrate clip, a few hundred MB (CI).
-  - Full-size 8 h export: once per milestone on the Mac, checking speed, memory, file size and the time-remaining estimate. The **Intel Mac is the speed benchmark**: if exports take minutes there, they take minutes everywhere. CI runners are Apple Silicon, so the Intel Mac is also where Intel behaviour gets tested.
-  - Why 8 h at all: it is the longest real output, and drift, leaks and large-file MP4 handling only show up at that scale.
+- **Build and test: CI plus the user's Mac.** The processing core is a Swift package. A GitHub Actions macOS workflow generates a frame-counter test clip with ffmpeg and runs the seam, duration and trim tests on every push. SwiftUI work and full-size exports run on the user's Mac, because the cloud session is Linux (no AVFoundation) and CI runners have limited disk and time.
+- **No 8 h export tests (changed 2026-11-14).** The user won't produce 8 h videos, and the 8 h CI exports failed often on noisy runner speed and a process-wide memory measurement. What stays:
+  - Seam drift: build a 960-insert (8 h) composition and check every insert time exactly, with no export (CI, milliseconds).
+  - Long audio exports: 1 h from the tiny clip with the test bed (CI on `main` and manual runs).
+  - Full-size export: once per milestone on the Mac at 3 h, checking speed, memory, file size and the time-remaining estimate. The **Intel Mac is the speed benchmark**: if exports take minutes there, they take minutes everywhere. CI runners are Apple Silicon, so the Intel Mac is also where Intel behaviour gets tested.
+  - If 8 h videos come back, add an 8 h export test then, measuring the export's own memory rather than the process peak.
 - **v1 = milestones 1–3** (core extend, basic UI, audio), because ambient videos need sound. The check "does passthrough export honour `AVAudioMix`?" is done as a quick test inside milestone 1 so the export path (passthrough vs reader/writer) is decided once.
 - **Audio model: ambient bed + music playlist.** Track 1 is a looped bed with a wrap crossfade. Track 2 is a folder of tracks chained in order, cycling to fill the duration. Lossless inputs (WAV/AIFF/FLAC) are preferred so AAC encoding happens once.
 - **Music is made outside Looper, pluggable later.** Looper reads folders of audio files and works offline. The core defines an `AudioSource` protocol so a generator could be added later. Reason: tracks are reusable across many videos, so generation is occasional while exporting is constant, and a paid network API doesn't belong in the export path. Generation for now: Claude via the Higgsfield connector (Suno instrumental music, 15–360 s per track; Mirelo SFX for ambience).

@@ -48,10 +48,10 @@ A macOS app that takes a short, seamless video loop (for example a 30-second amb
 - Make a test loop with a visible frame counter (`ffmpeg -f lavfi -i testsrc=size=1920x1080:rate=30 -t 30 ...`) and check the output around each seam: frame numbers must run ...898, 899, 0, 1... with no repeats or gaps.
 - Check output duration and frame count with `ffprobe` (ffmpeg is fine as a developer tool on this Mac, just not bundled in the app). For example, 3 h at 30 fps = 324,000 frames exactly.
 - Test a target that isn't a whole multiple of the clip length (for example 1 h 0 m 10 s) to confirm the last copy is trimmed correctly.
-- Test a very long export (8 h) for memory use and speed.
+- No 8 h export tests: the user doesn't produce 8 h videos (decided 2026-11-14; revisit if that changes). The 8 h drift and plan checks stay because they need no export and run in milliseconds.
 - The user's standard manual test on their Mac (real clip, run after each engine change; ask them to run it and paste the output):
   `cd ~/code/macOS/looper/LooperCore && swift run -c release looper ~/Desktop/cabin_rain_loop_30s_v2.MP4 15m ~/Desktop/test-15m.mp4`
-  For milestone sign-offs, the same with `8h` and `~/Desktop/test-8h.mp4`. The CLI also takes `--bed <file>` (audio or video), `--keep-bed-silence`, `--playlist <folder>` and `--clip-audio`.
+  For milestone sign-offs, the same with `3h` and `~/Desktop/test-3h.mp4`. The CLI also takes `--bed <file>` (audio or video), `--keep-bed-silence`, `--playlist <folder>` and `--clip-audio`.
 
 ## Conventions
 
@@ -64,9 +64,9 @@ A macOS app that takes a short, seamless video loop (for example a 30-second amb
 
 - `LooperCore/` is a Swift package (macOS 14+, Swift 6 language mode) with the engine and its tests (Swift Testing). It must not import SwiftUI or AppKit.
 - `Looper/` + `Looper.xcodeproj` is the app. The project uses an Xcode 16 synchronized folder, so files added under `Looper/` need no project edits. Release builds are universal (arm64 + x86_64).
-- `scripts/make-test-clip.sh` writes fixtures to `fixtures/` (or `$LOOPER_FIXTURES`): 30 s loops at 1080p30, tiny 320x180 30 fps (for 8 h tests), 360p at 24 fps and 29.97 fps, 360p30 with a stereo AAC track, plus a 10 s pink-noise bed WAV, a 10 s "screen recording" MP4 (video + AAC: 1 s silence, 8.5 s pink noise, 0.5 s silence) and a playlist folder of three 6 s tones (WAV, AIFF, FLAC). All 48 kHz stereo.
+- `scripts/make-test-clip.sh` writes fixtures to `fixtures/` (or `$LOOPER_FIXTURES`): 30 s loops at 1080p30, tiny 320x180 30 fps (for long and quick export tests), 360p at 24 fps and 29.97 fps, 360p30 with a stereo AAC track, plus a 10 s pink-noise bed WAV, a 10 s "screen recording" MP4 (video + AAC: 1 s silence, 8.5 s pink noise, 0.5 s silence) and a playlist folder of three 6 s tones (WAV, AIFF, FLAC). All 48 kHz stereo.
 - Every fixture frame carries its index in binary: 16 black/white square blocks along the top-left edge (block 0 = least significant bit). Tests read it with `FrameID.decode` (`LooperCoreTests/Support/MediaInspection.swift`) to check seams frame by frame without OCR. Block sizes and frame counts live in both the script and `Support/Fixtures.swift`; keep them in sync. Changing the script changes the CI cache key, so fixtures regenerate automatically.
-- Environment variables for tests: `LOOPER_FIXTURES` (fixture folder), `LOOPER_REQUIRE_FIXTURES=1` (missing fixtures fail instead of skip; set in CI), `LOOPER_REQUIRE_FFMPEG=1` (ffmpeg cross-checks fail instead of skip when ffmpeg is missing; set in CI), `LOOPER_LONG_TESTS=1` (run 8 h export tests; set in CI on `main` and manual runs).
+- Environment variables for tests: `LOOPER_FIXTURES` (fixture folder), `LOOPER_REQUIRE_FIXTURES=1` (missing fixtures fail instead of skip; set in CI), `LOOPER_REQUIRE_FFMPEG=1` (ffmpeg cross-checks fail instead of skip when ffmpeg is missing; set in CI), `LOOPER_LONG_TESTS=1` (run the 1 h audio export tests; set in CI on `main` and manual runs).
 - Cloud Claude sessions run on Linux without Swift or AVFoundation: Swift changes there are verified by CI, not locally. ffmpeg is available there for checking fixtures.
 
 ## Product spec

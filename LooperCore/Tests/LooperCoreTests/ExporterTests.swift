@@ -39,7 +39,7 @@ struct ExporterTests {
         let started = AsyncStream<Void>.makeStream()
 
         let export = Task {
-            try await LoopRenderer.render(clipURL: VideoFixture.main.url, target: .eightHours, to: output) { p in
+            try await LoopRenderer.render(clipURL: VideoFixture.main.url, target: .threeHours, to: output) { p in
                 if p.fractionCompleted > 0 { started.continuation.yield() }
             }
         }
