@@ -177,15 +177,12 @@ struct LongAudioExportTests {
         var testDescription: String { name }
     }
 
-    /// Pieces of the 10 s bed: 1 h with no crossfade = 360 pieces, 1 h with 3 s = 515,
-    /// 8 h with no crossfade = 2,880, 8 h with 3 s = 4,115. A bed this short is rendered
-    /// once with its crossfade baked in (`BedLoop`), so the piece count no longer adds
-    /// volume ramps; before that, 8 h with a crossfade took minutes just to set up.
+    /// Pieces of the 10 s bed: 1 h with no crossfade = 360 pieces, 1 h with 3 s = 515.
+    /// A bed this short is rendered once with its crossfade baked in (`BedLoop`), so the
+    /// piece count no longer adds volume ramps. No 8 h cases: 8 h videos aren't produced.
     static let cases = [
         Case(name: "1 h bed, no crossfade", seconds: 3600, crossfade: 0),
         Case(name: "1 h bed, 3 s crossfade", seconds: 3600, crossfade: 3),
-        Case(name: "8 h bed, no crossfade", seconds: 8 * 3600, crossfade: 0),
-        Case(name: "8 h bed, 3 s crossfade", seconds: 8 * 3600, crossfade: 3),
     ]
 
     @Test(arguments: cases)

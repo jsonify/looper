@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       long_tests:
-        description: Run long tests (8 h exports)
+        description: Run long tests (1 h audio exports)
         type: boolean
         default: false
 
@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Long tests (8 h exports from the tiny clip) run on main and on demand only.
+  # Long tests (1 h audio exports from the tiny clip) run on main and on demand only.
   LOOPER_LONG_TESTS: ${{ (github.ref == 'refs/heads/main' || inputs.long_tests) && '1' || '0' }}
 
 jobs:
