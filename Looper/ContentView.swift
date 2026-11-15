@@ -167,11 +167,13 @@ private struct AudioSection: View {
         @Bindable var model = model
         Section {
             BedRow()
-            if let bed = Binding($model.audio.bed) {
+            if let currentBed = model.audio.bed {
+                let bed = $model.audio.bed.unwrapped(fallback: currentBed)
                 TrackControls(track: bed.track, crossfade: bed.wrapCrossfade, crossfadeLabel: "Wrap crossfade")
             }
             PlaylistRow()
-            if let playlist = Binding($model.audio.playlist) {
+            if let currentPlaylist = model.audio.playlist {
+                let playlist = $model.audio.playlist.unwrapped(fallback: currentPlaylist)
                 TrackControls(track: playlist.track, crossfade: playlist.crossfade, crossfadeLabel: "Song crossfade")
             }
             Toggle("Use the clip's own audio", isOn: $model.audio.clipAudio.enabled)
