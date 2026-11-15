@@ -16,6 +16,8 @@ public enum GainEnvelope {
 
     /// Linear ramps per curved stretch; 8 keeps the equal-power error under ~1 %.
     public static let stepsPerCurve = 8
+    /// Fades up to this long (seconds) get a single linear ramp.
+    public static let shortFade = 0.05
 
     /// Built piece by piece, so the cost grows linearly with the number of pieces
     /// (an 8 h playlist of short songs has thousands).
@@ -26,6 +28,9 @@ public enum GainEnvelope {
         guard let first = pieces.first else { return [] }
         func curve(_ from: Double, _ length: Double) -> [Double] {
             guard length > 0 else { return [] }
+            // A click guard (clip audio's 10 ms edge fades) is too short for its shape to
+            // be heard: one ramp, not eight. Ramps are costly in bulk (see `BedLoop`).
+            if length <= shortFade { return [from, from + length] }
             return (0...stepsPerCurve).map { from + length * Double($0) / Double(stepsPerCurve) }
         }
         // Track fade in/out points: few, so each piece just filters them.

@@ -83,7 +83,7 @@ struct PreviewTimelineTests {
 
 /// The playable preview: the same layout as the export, in one composition.
 @Suite("LoopPreview", .enabled(if: Fixtures.available, "Run scripts/make-test-clip.sh to generate fixtures"),
-       .timeLimit(.minutes(1)))
+       .timeLimit(.minutes(3))) // <1 s locally; CI runs it beside the exports on 3 cores
 struct LoopPreviewTests {
     static let flat = AudioTrackSettings(volume: 1, fadeIn: 0, fadeOut: 0)
 
@@ -100,7 +100,7 @@ struct LoopPreviewTests {
         let video = try await preview.composition.loadTracks(withMediaType: .video)
         let audioTracks = try await preview.composition.loadTracks(withMediaType: .audio)
         #expect(video.count == 1)
-        #expect(audioTracks.count == 4) // bed and playlist, two alternating tracks each
+        #expect(audioTracks.count == 3) // the rendered bed on one track, the playlist on two alternating
         let videoRange = try await video[0].load(.timeRange)
         #expect(videoRange.duration == plan.duration)
 
@@ -147,7 +147,7 @@ struct LoopPreviewTests {
 
 @MainActor
 @Suite("PreviewModel", .enabled(if: Fixtures.available, "Run scripts/make-test-clip.sh to generate fixtures"),
-       .timeLimit(.minutes(1)))
+       .timeLimit(.minutes(3))) // <1 s locally; CI runs it beside the exports on 3 cores
 struct PreviewModelTests {
     func bedAudio(volume: Float = 0.6, crossfade: Double = 2) -> LoopAudioSettings {
         LoopAudioSettings(bed: BedSettings(file: AudioFixture.bed.url,

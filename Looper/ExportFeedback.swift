@@ -16,7 +16,10 @@ struct ExportFeedback: ViewModifier {
             .onChange(of: model.phase) { _, phase in
                 switch phase {
                 case .exporting:
-                    UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+                    // The async form: a completion closure written here would inherit the
+                    // view's main-actor isolation, and the system calls it on a background
+                    // queue, which Swift 6 traps on (crashed after the permission prompt).
+                    Task { _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) }
                 case .finished(let url):
                     NSApp.dockTile.badgeLabel = nil
                     notify(title: "Export finished", body: url.lastPathComponent)

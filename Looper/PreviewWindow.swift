@@ -421,11 +421,13 @@ private struct MixInspector: View {
     var body: some View {
         @Bindable var model = model
         Form {
-            if let bed = Binding($model.audio.bed) {
+            if let currentBed = model.audio.bed {
+                let bed = $model.audio.bed.unwrapped(fallback: currentBed)
                 Section { TrackControls(track: bed.track, crossfade: bed.wrapCrossfade, crossfadeLabel: "Wrap crossfade") }
                     header: { header(.bed) }
             }
-            if let playlist = Binding($model.audio.playlist) {
+            if let currentPlaylist = model.audio.playlist {
+                let playlist = $model.audio.playlist.unwrapped(fallback: currentPlaylist)
                 Section { TrackControls(track: playlist.track, crossfade: playlist.crossfade, crossfadeLabel: "Song crossfade") }
                     header: { header(.playlist) }
             }

@@ -31,7 +31,8 @@ struct LooperModelTests {
 
     func waitWhileExporting(_ model: LooperModel) async throws {
         let clock = ContinuousClock()
-        let deadline = clock.now + .seconds(30)
+        // Generous: CI runners took 21–39 s for the 45 s real export.
+        let deadline = clock.now + .seconds(120)
         while model.isExporting {
             guard clock.now < deadline else { Issue.record("export didn't finish"); return }
             try await Task.sleep(for: .milliseconds(10))
