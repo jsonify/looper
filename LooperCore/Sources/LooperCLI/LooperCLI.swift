@@ -10,6 +10,17 @@ import LooperCore
 /// The bed can be an audio file or a video with sound; silence at its start and end is
 /// trimmed (as in the app) unless `--keep-bed-silence` is given.
 ///
+/// With `--channel <folder or channel.json>`, the channel's publish kit text is made too
+/// (`title.txt`, `description.txt`, `tags.txt` next to the output) and printed:
+///
+///     --scene "Rainy Log Cabin" --mood cozy --elements "rain, fireplace" [--mode Sleep]
+///     [--seed <n>] [--record-history]
+///
+/// The scene defaults to one made from the clip's file name, the mode to the channel's
+/// default version of the same length (or its first). The channel's history is read so
+/// choices avoid recent uploads, but only written with `--record-history`, so test runs
+/// don't count as uploads.
+///
 /// Prints progress, then wall time, peak memory and output size.
 @main
 struct LooperCLI {
@@ -33,8 +44,18 @@ struct LooperCLI {
             audio.clipAudio.enabled = true
             args.remove(at: i)
         }
-        guard args.count == 3 else {
-            log("usage: looper <clip> <duration: h:mm:ss | 8h | 45m> <output.mp4> [--bed <file>] [--keep-bed-silence] [--playlist <folder>] [--clip-audio]")
+        let channelPath = option("--channel")
+        let scene = option("--scene"), mood = option("--mood"), elements = option("--elements")
+        let mode = option("--mode"), seed = option("--seed")
+        var recordHistory = false
+        if let i = args.firstIndex(of: "--record-history") {
+            recordHistory = true
+            args.remove(at: i)
+        }
+        guard args.count == 3, seed.map({ UInt64($0) != nil }) ?? true else {
+            log("usage: looper <clip> <duration: h:mm:ss | 3h | 45m> <output.mp4> [--bed <file>] [--keep-bed-silence] "
+                + "[--playlist <folder>] [--clip-audio] [--channel <folder> [--scene <text>] [--mood <text>] "
+                + "[--elements <a, b, c>] [--mode <mode>] [--seed <number>] [--record-history]]")
             exit(2)
         }
         let clipURL = URL(fileURLWithPath: args[0])
@@ -42,6 +63,30 @@ struct LooperCLI {
 
         do {
             let target = try TargetDuration(parsing: args[1])
+
+            // The kit is made before exporting, so a template problem shows at once.
+            var kitRun: (loaded: LoadedChannel, kit: PublishKit)?
+            if let channelPath {
+                var folder = URL(fileURLWithPath: channelPath)
+                if folder.pathExtension == "json" { folder.deleteLastPathComponent() }
+                let loaded = try ChannelLibrary.loadChannel(at: folder)
+                let channel = loaded.channel
+                let defaults = channel.versions.first { $0.duration == target } ?? channel.versions.first
+                let version = Version(mode: mode ?? defaults?.mode, noAds: defaults?.noAds ?? true,
+                                      duration: target, audio: audio)
+                var details = SceneDetails(suggestedFor: clipURL)
+                if let scene { details.scene = scene }
+                if let mood { details.mood = mood }
+                if let elements {
+                    details.elements = elements.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+                }
+                let job = Job(clip: clipURL, versions: [version], channelID: channel.id, scene: details,
+                              kitSeed: seed.flatMap(UInt64.init))
+                let history = try ChannelHistory.load(from: loaded.historyURL)
+                let kit = try KitFactory(channel: channel).kit(for: version, in: job, history: history)
+                kitRun = (loaded, kit)
+                log("channel: \(channel.name), mode \(version.mode), scene “\(details.scene)”, seed \(job.kitSeed)")
+            }
             let clip = try await ClipInfo.load(from: clipURL)
             let plan = LoopPlan(clip: clip, target: target)
             log("clip: \(Int(clip.naturalSize.width))x\(Int(clip.naturalSize.height)) \(clip.codec), "
@@ -98,6 +143,25 @@ struct LooperCLI {
             }
             log("peak memory: \(ByteCountFormatter.string(fromByteCount: peakResidentBytes(), countStyle: .memory))")
             log("output: \(ByteCountFormatter.string(fromByteCount: size, countStyle: .file)) at \(outputURL.path)")
+
+            if let (loaded, kit) = kitRun {
+                let folder = outputURL.deletingLastPathComponent()
+                try kit.write(to: folder)
+                if recordHistory {
+                    var history = try ChannelHistory.load(from: loaded.historyURL)
+                    history.record(kit.historyEntry)
+                    try history.save(to: loaded.historyURL)
+                }
+                log("")
+                log("title (\(kit.title.count) chars): \(kit.title)")
+                log("")
+                log("description (\(kit.description.count) chars):\n\(kit.description)")
+                log("")
+                log("tags (\(kit.tags.count)): \(kit.tagsText)")
+                for note in kit.notes { log("note: \(note)") }
+                log("kit: \(PublishKit.titleFileName), \(PublishKit.descriptionFileName), \(PublishKit.tagsFileName) in \(folder.path)"
+                    + (recordHistory ? "; recorded in the channel's history" : ""))
+            }
         } catch {
             log("")
             log("error: \(error.localizedDescription)")

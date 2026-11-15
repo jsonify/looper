@@ -15,18 +15,22 @@ public struct Job: Codable, Equatable, Identifiable, Sendable {
     public var channelID: String?
     /// Scene, mood and elements for the channel templates.
     public var scene: SceneDetails
+    /// Seeds the publish kit's text choices, so making the kit again gives the same text.
+    /// `shuffleKit()` picks a new one. Defaults to a value derived from `id`.
+    public var kitSeed: UInt64
 
     public init(id: UUID = UUID(), clip: URL, versions: [Version] = [], thumbnailTime: Double = 0,
-                channelID: String? = nil, scene: SceneDetails? = nil) {
+                channelID: String? = nil, scene: SceneDetails? = nil, kitSeed: UInt64? = nil) {
         self.id = id
         self.clip = clip
         self.versions = versions
         self.thumbnailTime = thumbnailTime
         self.channelID = channelID
         self.scene = scene ?? SceneDetails(suggestedFor: clip)
+        self.kitSeed = kitSeed ?? KitRandom.fnv1a(id.uuidString)
     }
 
-    private enum CodingKeys: String, CodingKey { case id, clip, versions, thumbnailTime, channelID, scene }
+    private enum CodingKeys: String, CodingKey { case id, clip, versions, thumbnailTime, channelID, scene, kitSeed }
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -36,6 +40,15 @@ public struct Job: Codable, Equatable, Identifiable, Sendable {
         thumbnailTime = try c.decodeIfPresent(Double.self, forKey: .thumbnailTime) ?? 0
         channelID = try c.decodeIfPresent(String.self, forKey: .channelID)
         scene = try c.decodeIfPresent(SceneDetails.self, forKey: .scene) ?? SceneDetails(suggestedFor: clip)
+        kitSeed = try c.decodeIfPresent(UInt64.self, forKey: .kitSeed) ?? KitRandom.fnv1a(id.uuidString)
+    }
+
+    /// New text choices for every version's kit ("Shuffle").
+    public mutating func shuffleKit() {
+        var generator = SystemRandomNumberGenerator()
+        var seed = kitSeed
+        while seed == kitSeed { seed = generator.next() }
+        kitSeed = seed
     }
 
     /// The folder holding all of this job's versions.

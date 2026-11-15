@@ -32,7 +32,25 @@ Each YouTube channel has a brand kit that the publish kit is written from: title
   quiet-keys/      channel.json
 ```
 
-Copy the starters from `channels/` (Rainfall Hours, Hearth & Study, Quiet Keys) into your channels folder and edit the JSON. Text pools may use `{scene}`, `{mood}`, `{elements}`, `{hours}`, `{duration}`, `{mode}`, `{channel}` and `{music}`; anything else in braces is reported when the channel loads, along with bad colours, missing pools and tag mistakes. A pool is either a list or `{"shared": [...], "byMode": {"Sleep": [...]}}`. Durations can be written as `"3h"` or `"1:30:00"`. `noAds` (on by default) adds "(No-Ads)" to titles and descriptions; a version can turn it off. The factory that writes titles, descriptions, tags and thumbnails from these is in progress (#71, #72, #73).
+Copy the starters from `channels/` (Rainfall Hours, Hearth & Study, Quiet Keys) into your channels folder and edit the JSON. Text pools may use `{scene}`, `{mood}`, `{elements}`, `{hours}`, `{duration}`, `{mode}`, `{channel}` and `{music}`; anything else in braces is reported when the channel loads, along with bad colours, missing pools and tag mistakes. A pool is either a list or `{"shared": [...], "byMode": {"Sleep": [...]}}`. Durations can be written as `"3h"` or `"1:30:00"`. `noAds` (on by default) adds "(No-Ads)" to titles and descriptions; a version can turn it off. `music` names the music for `{music}` (e.g. `"soft piano"`); it's only filled for versions with a playlist.
+
+### Publish kit text
+
+Each exported version gets `title.txt`, `description.txt` and `tags.txt` next to its `video.mp4`:
+
+- **Title:** a pattern from the channel's pool plus ` (No-Ads)`, 100 characters at most including the suffix. Placeholder values are capitalised to suit Title Case.
+- **Description:** `(No-Ads)` + hook line, what you hear, "Perfect for…", the footer, then the three hashtags; 5000 characters at most.
+- **Tags:** scene and elements, then mode tags, then duration tags ("3 hour sleep", "3 hours"), then core tags. Duplicates are dropped, and the list is cut to YouTube's 500-character total, counting commas and the quotes around tags with spaces.
+
+A pattern that uses a placeholder the job leaves empty (no mood, no elements, `{music}` without a playlist) is skipped, falling back to the shared pool. If nothing fits, the job stops before exporting. The "what you hear" line is simply left out. Choices are seeded per job, so making the kit again gives the same text until the job is shuffled. Each channel's `history.json` (git-ignored) steers new uploads away from the title patterns and hook lines of the last 5. A version's `publish` overrides replace the title pattern or the hook and add extra tags. When No-Ads is on, a note reminds you to turn ads off for the video in YouTube Studio. Thumbnails come next (#72), then the app's channel picker and copy buttons (#73).
+
+From the CLI:
+
+```bash
+swift run -c release looper clip.mp4 3h out/video.mp4 --channel ../channels/rainfall-hours --scene "Rainy Log Cabin" --mood cozy --elements "rain, fireplace"
+```
+
+This writes the three files next to the output and prints them. `--mode` picks the mode (default: the channel's version of the same length) and `--seed` fixes the choices. History is read but only written with `--record-history`, so test runs don't count as uploads.
 
 ## Installing on another Mac
 

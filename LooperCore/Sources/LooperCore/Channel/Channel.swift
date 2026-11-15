@@ -38,12 +38,15 @@ public struct Channel: Codable, Equatable, Sendable {
     public var versions: [Version]
     /// Music folder for new jobs: absolute, `~/…`, or relative to the channel's folder.
     public var defaultPlaylist: String?
+    /// How templates name the music, as in a sentence, e.g. "soft piano": `{music}`.
+    /// Only versions with a playlist fill it; for others `{music}` is empty.
+    public var music: String
 
     public init(id: String, name: String, brand: ChannelBrand = ChannelBrand(), noAds: Bool = true,
                 titles: ModePools = ModePools(), hooks: ModePools = ModePools(), hear: ModePools = ModePools(),
                 perfectFor: ModePools = ModePools(), modeTags: ModePools = ModePools(), footer: String = "",
                 hashtags: [String] = [], coreTags: [String] = [], versions: [Version] = [],
-                defaultPlaylist: String? = nil) {
+                defaultPlaylist: String? = nil, music: String = "") {
         self.id = id
         self.name = name
         self.brand = brand
@@ -58,11 +61,12 @@ public struct Channel: Codable, Equatable, Sendable {
         self.coreTags = coreTags
         self.versions = versions
         self.defaultPlaylist = defaultPlaylist
+        self.music = music
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, name, brand, noAds, titles, hooks, hear, perfectFor, modeTags, footer, hashtags, coreTags,
-             versions, defaultPlaylist
+             versions, defaultPlaylist, music
     }
 
     public init(from decoder: any Decoder) throws {
@@ -81,6 +85,7 @@ public struct Channel: Codable, Equatable, Sendable {
         coreTags = try c.decodeIfPresent([String].self, forKey: .coreTags) ?? []
         versions = try c.decodeIfPresent([Version].self, forKey: .versions) ?? []
         defaultPlaylist = try c.decodeIfPresent(String.self, forKey: .defaultPlaylist)
+        music = try c.decodeIfPresent(String.self, forKey: .music) ?? ""
     }
 
     /// Whether `version`'s title and description carry the No-Ads label.
